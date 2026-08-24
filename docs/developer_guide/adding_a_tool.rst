@@ -28,7 +28,7 @@ does the work; results are stored on ``self`` and written through
 
 .. code-block:: python
 
-   # source/Engines/MyEngine.py
+   # urban_network_analysis/Engines/MyEngine.py
 
    from .Base import Base
 
@@ -165,7 +165,7 @@ a user script instead. The pattern:
 
 .. code-block:: python
 
-   # my_analysis.py — outside source/
+   # my_analysis.py — your script, outside the package
    from urban_network_analysis import UNA
 
    una = UNA()
