@@ -1,0 +1,8 @@
+{
+"type": "FeatureCollection",
+"name": "MIT_SAP_flow_origin",
+"crs": { "type": "name", "properties": { "name": "urn:ogc:def:crs:EPSG::6491" } },
+"features": [
+{ "type": "Feature", "properties": { "Origin": "MIT_SAP", "weight": 100 }, "geometry": { "type": "Point", "coordinates": [ 233338.878574152826332, 901160.431401172187179 ] } }
+]
+}

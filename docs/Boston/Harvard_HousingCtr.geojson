@@ -1,0 +1,8 @@
+{
+"type": "FeatureCollection",
+"name": "Harvard_HousingCtr",
+"crs": { "type": "name", "properties": { "name": "urn:ogc:def:crs:EPSG::6491" } },
+"features": [
+{ "type": "Feature", "properties": { "fid": 236923, "id": "ec2173ac-917e-4fa0-860f-77dcba82e372", "class": "retail", "subtype": "commercial", "fp_area_m2": 846.4, "height_m": 20.3, "height_source": "actual", "n_floors": 4, "floors_source": "actual", "gfa_m2": 3385.5, "lon": -71.116027, "lat": 42.372198 }, "geometry": { "type": "Point", "coordinates": [ 231635.58113069756655, 902481.209468215238303 ] } }
+]
+}

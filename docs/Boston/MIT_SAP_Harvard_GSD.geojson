@@ -1,0 +1,9 @@
+{
+"type": "FeatureCollection",
+"name": "MIT_SAP_Harvard_GSD",
+"crs": { "type": "name", "properties": { "name": "urn:ogc:def:crs:EPSG::6491" } },
+"features": [
+{ "type": "Feature", "properties": { "Origin": "MIT_SAP", "Count": 1 }, "geometry": { "type": "Point", "coordinates": [ 233338.878574152826332, 901160.431401172187179 ] } },
+{ "type": "Feature", "properties": { "Origin": "Harvard_GSD", "Count": 1 }, "geometry": { "type": "Point", "coordinates": [ 231782.803684911574237, 902888.682802796945907 ] } }
+]
+}

@@ -1,0 +1,14 @@
+# Documentation build requirements for Read the Docs.
+
+sphinx>=7.0
+sphinx-rtd-theme>=2.0
+sphinx-copybutton>=0.5
+myst-parser>=2.0
+
+# UNA runtime dependencies — needed so autodoc can import the package.
+numpy
+scipy
+geopandas
+shapely
+networkx
+pandas

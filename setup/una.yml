@@ -1,0 +1,21 @@
+name: una
+channels:
+  - conda-forge
+  - nodefaults
+dependencies:
+  - python=3.11
+  - geopandas
+  - pyogrio            # ← NEW: explicit, avoids fiona fallback
+  - pyarrow
+  - shapely
+  - networkx
+  - numpy
+  - pandas
+  - numba
+  - psutil
+  - scipy
+  - scikit-learn
+  - threadpoolctl
+  - openblas           # cross-platform BLAS; works on Intel + ARM
+  - nomkl              # ← NEW: forces non-MKL builds on Intel for portability
+  - tqdm

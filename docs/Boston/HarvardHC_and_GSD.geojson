@@ -1,0 +1,9 @@
+{
+"type": "FeatureCollection",
+"name": "HarvardHC_and_GSD",
+"crs": { "type": "name", "properties": { "name": "urn:ogc:def:crs:EPSG::6491" } },
+"features": [
+{ "type": "Feature", "properties": { "Destination": "Harvard_HousingCtr", "weight": 1 }, "geometry": { "type": "Point", "coordinates": [ 231635.58113069756655, 902481.209468215238303 ] } },
+{ "type": "Feature", "properties": { "Destination": "Harvard_GSD", "weight": 3 }, "geometry": { "type": "Point", "coordinates": [ 231782.803684911574237, 902888.682802796945907 ] } }
+]
+}

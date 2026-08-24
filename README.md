@@ -1,8 +1,7 @@
 # urban-network-analysis (UNA)
 
 Installable package build of UNA — accessibility and pedestrian-flow
-metrics on street networks. Code is identical to `una-2.5.5/source`;
-only the packaging differs.
+metrics on street networks. Code version una-2.5.5.
 
 ## Install (development / testing)
 

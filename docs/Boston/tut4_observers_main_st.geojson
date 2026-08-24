@@ -1,0 +1,14 @@
+{
+"type": "FeatureCollection",
+"name": "tut4_observers_main_st2",
+"crs": { "type": "name", "properties": { "name": "urn:ogc:def:crs:EPSG::6491" } },
+"features": [
+{ "type": "Feature", "properties": { "observer_id": "Obs1_HockfieldCourt" }, "geometry": { "type": "Point", "coordinates": [ 233873.466381871956401, 901365.069879638263956, 17.998883135744631 ] } },
+{ "type": "Feature", "properties": { "observer_id": "Obs2_WestMain" }, "geometry": { "type": "Point", "coordinates": [ 233881.088734667544486, 901429.159298685379326, 23.996649407233889 ] } },
+{ "type": "Feature", "properties": { "observer_id": "Obs3_KendallMIT_Entrance" }, "geometry": { "type": "Point", "coordinates": [ 234089.42076207237551, 901410.806520770303905, 26.047369294483545 ] } },
+{ "type": "Feature", "properties": { "observer_id": "Obs4_CarletonSt" }, "geometry": { "type": "Point", "coordinates": [ 234081.806905736710178, 901324.137639874359593, 24.13926536778758 ] } },
+{ "type": "Feature", "properties": { "observer_id": "Obs5_ThirdSt" }, "geometry": { "type": "Point", "coordinates": [ 234253.396605137852021, 901468.107033294741996, 7.800591749154776 ] } },
+{ "type": "Feature", "properties": { "observer_id": "Obs6_EastMain" }, "geometry": { "type": "Point", "coordinates": [ 234179.756503384531243, 901401.261450286605395, 7.840414883419058 ] } },
+{ "type": "Feature", "properties": { "observer_id": "Obs7_Broadway" }, "geometry": { "type": "Point", "coordinates": [ 234118.096216073288815, 901508.208956777001731, 18.226722610764874 ] } }
+]
+}
