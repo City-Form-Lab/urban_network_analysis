@@ -36,8 +36,8 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/asevtsuk/urban_network_analysis"
-Repository = "https://github.com/asevtsuk/urban_network_analysis"
+Homepage = "https://github.com/City-Form-Lab/urban_network_analysis"
+Repository = "https://github.com/City-Form-Lab/urban_network_analysis"
 
 # ----------------------------------------------------------------------
 # Versioning — single source of truth.

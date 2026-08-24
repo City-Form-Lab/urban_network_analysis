@@ -43,7 +43,7 @@ Installation is two steps: create a conda environment with the heavy
 geospatial dependencies, then ``pip install`` the UNA package into it.
 
 **Step 1 — create the environment.** Download `una.yml
-<https://github.com/asevtsuk/urban_network_analysis/blob/main/setup/una.yml>`_
+<https://github.com/City-Form-Lab/urban_network_analysis/blob/main/setup/una.yml>`_
 (or use your clone's ``setup/`` folder), then in a Terminal (macOS) or
 Anaconda Prompt (Windows):
 
@@ -70,14 +70,14 @@ command from here on assumes this environment is active.
 
 .. code-block:: bash
 
-   pip install git+https://github.com/asevtsuk/urban_network_analysis.git
+   pip install git+https://github.com/City-Form-Lab/urban_network_analysis.git
 
 Or, if you plan to modify the code, clone the repository and install it
 in editable mode so your edits take effect without reinstalling:
 
 .. code-block:: bash
 
-   git clone https://github.com/asevtsuk/urban_network_analysis.git
+   git clone https://github.com/City-Form-Lab/urban_network_analysis.git
    pip install -e ./urban_network_analysis
 
 

@@ -12,3 +12,7 @@ geopandas
 shapely
 networkx
 pandas
+numba
+scikit-learn
+psutil
+pyogrio

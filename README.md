@@ -33,13 +33,13 @@ conda env create -f setup/una.yml
 conda activate una
 
 # 2. the package
-pip install git+https://github.com/asevtsuk/urban_network_analysis.git
+pip install git+https://github.com/City-Form-Lab/urban_network_analysis.git
 ```
 
 To modify the code, clone and install in editable mode instead:
 
 ```bash
-git clone https://github.com/asevtsuk/urban_network_analysis.git
+git clone https://github.com/City-Form-Lab/urban_network_analysis.git
 pip install -e ./urban_network_analysis
 ```
 
