@@ -1,0 +1,61 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "urban-network-analysis"
+dynamic = ["version"]
+description = "UNA — accessibility and pedestrian-flow metrics on street networks"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { file = "LICENSE" }
+authors = [
+    { name = "Andres Sevtsuk", email = "asevtsuk@mit.edu" },
+]
+keywords = [
+    "urban-planning", "network-analysis", "accessibility",
+    "pedestrian-flow", "betweenness", "gis",
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: GIS",
+]
+dependencies = [
+    "numpy",
+    "scipy",
+    "pandas",
+    "geopandas",
+    "shapely",
+    "networkx",
+    "numba",
+    "scikit-learn",
+    "psutil",
+]
+
+[project.urls]
+Homepage = "https://github.com/asevtsuk/urban_network_analysis"
+Repository = "https://github.com/asevtsuk/urban_network_analysis"
+
+# ----------------------------------------------------------------------
+# Versioning — single source of truth.
+#
+# The version string lives ONLY in
+#   src/urban_network_analysis/__init__.py  (__version__ = "x.y.z")
+# hatchling reads it from there at build/install time via the setting
+# below, and exposes it as package metadata. So:
+#   * code:      urban_network_analysis.__version__       -> "2.5.5"
+#   * metadata:  importlib.metadata.version(
+#                    "urban-network-analysis")            -> "2.5.5"
+#   * pip list:  urban-network-analysis 2.5.5
+# To release a new version, edit __version__ in __init__.py, commit,
+# and tag (git tag v2.5.6). Never write the version here as well —
+# duplicated version strings drift.
+# ----------------------------------------------------------------------
+[tool.hatch.version]
+path = "src/urban_network_analysis/__init__.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/urban_network_analysis"]
