@@ -161,6 +161,26 @@ When loaded via ``pairing_file="pairings.csv"``, UNA:
 5. When you then call ``RunBatch("accessibility")``, iterates the
    list and dispatches to the appropriate run method.
 
+.. important::
+
+   **Row file paths resolve relative to the pairing CSV's own
+   directory.** When a row leaves ``data_folder`` blank (the usual
+   case), UNA sets it to the folder containing the CSV — so
+   ``network_file``, ``origins_file``, and ``destinations_file`` are
+   found relative to the CSV's location, including relative paths like
+   ``../network/streets.geojson``. This makes a pairing table
+   portable: keep the CSV in a fixed position relative to the data and
+   the same file runs unchanged on any machine, regardless of where
+   the drive or sync folder is mounted. A row can opt out by filling
+   its own ``data_folder`` column or by using absolute file paths.
+
+   The driver script does **not** override this: setting
+   ``data_folder`` on ``una.settings`` before ``RunBatch`` has no
+   effect on rows. The only script-level path RunBatch honors is
+   ``output_folder``, used as a fallback for rows whose
+   ``output_folder`` is blank — that is the per-machine knob for
+   directing results.
+
 The **JSON** format is functionally identical — a top-level JSON array
 of settings objects. Use it when you want git-friendly diffs or
 programmatic generation from another tool.
