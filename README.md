@@ -22,6 +22,8 @@ penalties. Hot loops are Numba-compiled and searches are radius-bounded,
 which keeps large-scale runs feasible. Results export to GeoJSON,
 Feather, and CSV for mapping in QGIS or any GIS.
 
+![Pedestrian flow estimates on the Boston inner-core network](docs/images/maine.jpg)
+
 ## Installation
 
 Two steps — a conda environment for the geospatial dependencies, then
