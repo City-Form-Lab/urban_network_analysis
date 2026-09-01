@@ -22,7 +22,9 @@ penalties. Hot loops are Numba-compiled and searches are radius-bounded,
 which keeps large-scale runs feasible. Results export to GeoJSON,
 Feather, and CSV for mapping in QGIS or any GIS.
 
-![Pedestrian flow estimates on the Boston inner-core network](docs/images/maine.jpg)
+![Estimated foot-traffic volumes in Bangor, ME](docs/images/maine.jpg)
+
+*Estimated foot-traffic volumes in Bangor, ME. From the [Pedestrian Volume Model for Maine Towns](https://cityform.mit.edu/projects/a-pedestrian-volume-model-for-maine-towns) project.*
 
 ## Installation
 
