@@ -73,9 +73,8 @@ many analyses from a pairings CSV.
 
 ## Documentation and tutorials
 
-**
 **Documentation** and **tutorials** for the UNA Python package are found at: https://urban-network-analysis.readthedocs.io/en/latest/index.html
-**
+
 
 
 ## Versioning
