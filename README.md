@@ -22,7 +22,7 @@ penalties. Hot loops are Numba-compiled and searches are radius-bounded,
 which keeps large-scale runs feasible. Results export to GeoJSON,
 Feather, and CSV for mapping in QGIS or any GIS.
 
-Documentation and tutorials for the UNA Python package are found at: https://urban-network-analysis.readthedocs.io/en/latest/index.html
+**Documentation** and **tutorials** for the UNA Python package are found at: https://urban-network-analysis.readthedocs.io/en/latest/index.html
 
 ![Estimated foot-traffic volumes in Bangor, ME](docs/images/maine.jpg)
 
