@@ -245,6 +245,52 @@ options" is the right proxy for trip generation intensity — think
 building." Requires calibration of ``G_cap`` against your
 destination-weight scale.
 
+**Deriving G_cap automatically.** A common calibration convention sets
+``G_cap`` at a high percentile (typically the 95th) of the gravity
+distribution across all origins, so the best-served ~5% of origins
+saturate at full trip generation. Rather than running accessibility
+separately, measuring the percentile, and copying the number into the
+flow settings, set
+:py:data:`../user_guide/settings_reference:flow_gravity_cap` to a
+percentile string (``"p95"``, ``"p99"``, ``"max"``) and ``RunFlow()``
+derives it internally — from the same network, radius, β, turn and
+elevation settings the flow run itself uses, which removes the most
+common source of cap drift. The percentile is taken over all origins
+(zeros included), with a ``p95 → p99 → max`` fallback for zero-inflated
+distributions; the resolved value is logged and echoed in the saved
+settings. For scenario comparisons, auto-derive on the baseline and
+pin the resolved number in the scenario leg.
+
+destination_decay — the legacy Madina convention
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+``flow_decay_method = "destination_decay"`` reproduces the trip
+generation of the legacy *Madina* Python package, where each
+destination's trips are decayed individually:
+
+.. math::
+
+   T(o, d) = W(o) \cdot P(d \mid o) \cdot \text{decay}(d(o, d))
+
+so total generation is the Huff-weighted *average* decay rather than a
+function of the closest destination or the gravity sum. This is
+mathematically the source of the non-monotonicity that motivated the
+newer methods: adding a farther destination dilutes the Huff shares of
+near destinations while contributing little decayed volume of its own,
+so an origin's total trips can *fall* when its opportunity set grows.
+The mode is retained strictly for comparability with earlier Madina
+results; ``flow_gravity_cap`` is ignored while it is active.
+
+**Reproducing Madina-package results.** Trip generation is only one of
+the model components; to reproduce a legacy Madina flow run, set all
+of: ``flow_decay_method = "destination_decay"``,
+``flow_engine = "k_alternatives"`` (Madina's betweenness enumerates
+discrete paths), matching ``flow_n_alternatives``, detour and
+path-penalty settings, the same ``gravity_beta`` or logistic midpoint,
+and the same network weights and radius. Differences in any of these
+will dominate the comparison long before the trip-generation
+convention does.
+
 
 Huff destination choice
 -----------------------

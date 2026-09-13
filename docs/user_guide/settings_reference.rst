@@ -75,6 +75,12 @@ every subsequent layer.
    geometric length by a pedestrian-quality factor derived from trees,
    sidewalk width, traffic noise.
 
+   Custom costs must be positive for shortest-path routing. If the
+   chosen column contains NaN or non-positive values, UNA falls back to
+   the segment's **geometric length** for those segments and logs a
+   warning naming the column, the count, and the first offending row
+   indices — so data gaps never silently sever or distort the network.
+
 .. py:data:: network_weight_default
 
    :Type: ``float``
@@ -362,7 +368,11 @@ Dijkstra runs. They stack additively with any obstacle penalties.
    Enable turn penalties along routes. Both pedestrians and cyclists
    prefer to avoid unnecessary turns, and turn-aware routing is often
    what separates a defensible pedestrian flow model from a naive one.
-   Turn-aware routing is 2–4× slower than turn-free routing.
+   Supported by the accessibility engines and by **both** flow engines:
+   ``k_alternatives`` applies turns during path enumeration, and
+   ``aggregate_flow`` runs its gradients on a turn-expanded line graph
+   (see :doc:`../concepts/aggregate_flow`). Turn-aware routing is
+   roughly 1.5–4× slower than turn-free routing depending on engine.
 
 .. py:data:: turn_threshold
 
@@ -601,7 +611,7 @@ destinations.
 
 .. py:data:: flow_decay_method
 
-   :Type: ``one of "closest" | "gravity_cap"``
+   :Type: ``one of "closest" | "gravity_cap" | "destination_decay"``
    :Default: ``"closest"``
 
    How the decay factor is aggregated across an origin's reachable
@@ -613,9 +623,21 @@ destinations.
    non-monotonicity of earlier UNA versions where adding a far
    destination could *reduce* trip generation.
 
+   ``"destination_decay"`` is that earlier convention, retained for
+   comparability with results produced by the legacy *Madina* package:
+   every destination's trips are decayed individually,
+   ``T(o,d) = W(o) × HuffShare(d) × decay(d(o,d))`` (with
+   ``use_nearest_destination = True``, all trips go to the nearest
+   destination decayed by its distance). ``flow_gravity_cap`` is
+   ignored in this mode, and ``Validation()`` prints a reminder that
+   trip generation is non-monotonic in opportunity — adding a farther
+   destination can reduce total trips. Prefer ``"gravity_cap"`` for new
+   analyses; see :doc:`../concepts/gravity_and_decay` for a recipe on
+   reproducing Madina results.
+
 .. py:data:: flow_gravity_cap
 
-   :Type: ``float``
+   :Type: ``float`` or percentile string (``"p95"``, ``"p99"``, ``"max"``)
    :Default: ``1``
 
    The gravity value above which an origin saturates at full
@@ -624,6 +646,27 @@ destinations.
    destination-weight scale — if median destination weight is 30, a cap
    of 30 means "one median-weight destination at zero distance saturates
    the origin".
+
+   **Automatic percentile caps.** Instead of a number, a percentile
+   string such as ``"p95"`` derives the cap automatically: before the
+   flow engine runs, ``RunFlow()`` computes gravity accessibility for
+   the run's own origins, destinations, and network — using the same
+   engine dispatch as ``RunAccessibility()``, so turns and elevation
+   settings are honored — and takes that percentile of the per-origin
+   gravity values (all origins, zeros included). A ``p95 → p99 → max``
+   fallback cascade handles zero-inflated distributions. The resolved
+   numeric value is logged, written back into the settings (so saved
+   settings echo the number actually used), and stored on
+   ``una.resolved_gravity_cap``. This guarantees the cap is derived
+   from exactly the same impedance model as the flow run, at the cost
+   of one extra accessibility pass per run.
+
+   .. warning::
+
+      For scenario comparisons, derive the cap on the **baseline** run
+      and pin the resolved number in the scenario leg. Letting both
+      legs auto-derive changes the trip-generation basis between them
+      and contaminates the before/after difference.
 
 .. py:data:: flow_path_detour_penalty
 

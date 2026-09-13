@@ -87,9 +87,12 @@ engines can evolve independently. This duplicates some plumbing
 similar to Flow's, but deliberately does not carry over the pieces
 Flow needs and this engine doesn't: k-alternatives enumeration, the
 turn-aware line graph, assigned-routing, route/debug-print bookkeeping.
-Turn-aware routing is not yet supported by this engine (see
-docs/concepts/aggregate_flow.rst) -- _prepare_params raises a clear
-error when settings.turns is True rather than silently ignoring it.
+Turn-aware routing (settings.turns) is supported through a SEPARATE
+code path: when turns=True, Centrality dispatches to a line-graph
+(arc-state) pipeline where each directed arc of the node graph is a
+state and turn penalties live on state transitions. The turns=False
+path is completely untouched by this feature -- it runs the exact same
+node-graph code as before. See "Turn-aware pipeline" section below.
 
 Design principle - trust Settings
 ==================================
@@ -101,6 +104,7 @@ Settings.py, not here.
 """
 from __future__ import annotations
 
+import math
 import time
 import threading
 import concurrent.futures
@@ -438,13 +442,6 @@ class AggregateFlow(Base):
         emit per-route/debug-print records, so those Settings fields
         (and their cross-checks) are Flow's concern, not this engine's.
         """
-        if bool(s.turns):
-            raise ValueError(
-                "flow_engine='aggregate_flow' does not support turn-aware "
-                "routing yet (settings.turns=True). Set turns=False, or use "
-                "flow_engine='k_alternatives' for turn-aware flow."
-            )
-
         ratio        = float(s.flow_detour_ratio)
         buffer       = float(s.flow_detour_buffer)
         mode         = str(s.flow_detour_mode).strip().lower()
@@ -534,6 +531,8 @@ class AggregateFlow(Base):
             use_o_weights     = bool(s.flow_origin_weights),
             use_d_weights     = bool(s.flow_destination_weights),
             use_turns         = bool(s.turns),
+            turn_thresh       = float(s.turn_threshold),
+            turn_amt          = float(s.turn_penalty),
             elevation         = bool(s.elevation),
             elevation_penalty = float(s.elevation_penalty),
             compute_node_flow = bool(s.flow_compute_node_flow),
@@ -783,20 +782,49 @@ class AggregateFlow(Base):
         self._elastic_knn      = None
         self._elastic_factors  = None
 
-        # Precompute backward Dijkstras (distances + predecessor trees)
-        # from destination virtual nodes.
-        t_bwd = time.perf_counter()
-        dest_grad_sparse = self._precompute_dest_gradients(ns)
-        self.logger.log(
-            "AggregateFlow",
-            f"Backward gradients: {self._n_destinations} destinations "
-            f"in {time.perf_counter()-t_bwd:.2f}s "
-            f"(limit={self._gradient_limit(ns):.0f}).",
-            v=1,
-        )
+        if ns["use_turns"]:
+            # ---- TURN-AWARE PATH (line graph / arc states) -----------
+            # Completely separate from the turns=False pipeline below:
+            # nothing in the node-graph path is touched by this branch.
+            t_lg = time.perf_counter()
+            self._build_line_graph_turns(ns)
+            self.logger.log(
+                "AggregateFlow",
+                f"Line graph (turn-aware): {self._lg_n_states:,} states, "
+                f"{int(self._lg_indices.shape[0]):,} transitions, "
+                f"built in {time.perf_counter()-t_lg:.2f}s "
+                f"(threshold={ns['turn_thresh']:.0f} deg, "
+                f"penalty={ns['turn_amt']:.1f}).",
+                v=1,
+            )
 
-        # Origin loop.
-        self._process_origins_aggregate(dest_grad_sparse, ns)
+            t_bwd = time.perf_counter()
+            dest_grad_sparse = self._precompute_dest_gradients_turns(ns)
+            self.logger.log(
+                "AggregateFlow",
+                f"Backward gradients (turn-aware): {self._n_destinations} "
+                f"destinations in {time.perf_counter()-t_bwd:.2f}s "
+                f"(limit={self._gradient_limit(ns):.0f}).",
+                v=1,
+            )
+
+            self._process_origins_aggregate_turns(dest_grad_sparse, ns)
+        else:
+            # ---- NODE-GRAPH PATH (unchanged) -------------------------
+            # Precompute backward Dijkstras (distances + predecessor
+            # trees) from destination virtual nodes.
+            t_bwd = time.perf_counter()
+            dest_grad_sparse = self._precompute_dest_gradients(ns)
+            self.logger.log(
+                "AggregateFlow",
+                f"Backward gradients: {self._n_destinations} destinations "
+                f"in {time.perf_counter()-t_bwd:.2f}s "
+                f"(limit={self._gradient_limit(ns):.0f}).",
+                v=1,
+            )
+
+            # Origin loop.
+            self._process_origins_aggregate(dest_grad_sparse, ns)
 
         # Assemble undirected edge_flow.
         self.edge_flow = self.edge_flow_AB + self.edge_flow_BA
@@ -1150,6 +1178,289 @@ class AggregateFlow(Base):
             )
 
 
+    # ------------------------------------------------------------------
+    # Turn-aware pipeline methods (see module-level section below for
+    # the model description). Only reached when settings.turns is True.
+    # ------------------------------------------------------------------
+    def _build_line_graph_turns(self, ns) -> None:
+        """Build the line-graph CSR (forward + reversed) and the
+        per-state attribute arrays used by the turn-aware kernel."""
+        n_net  = self._n_network_nodes
+        n_dest = self._n_destinations
+        n_orig = self._n_origins
+        n_arcs = int(self._csr_indices.shape[0])
+
+        (lg_indptr, lg_indices, lg_w, arc_source) = _build_line_csr_turns(
+            self._csr_indptr.astype(np.int64),
+            self._csr_indices.astype(np.int32),
+            self._csr_weights.astype(np.float64),
+            self._csr_edge_id.astype(np.int64),
+            n_net, n_dest, n_orig,
+            np.ascontiguousarray(self._node_xy, dtype=np.float64),
+            float(ns["turn_thresh"]), float(ns["turn_amt"]),
+        )
+        n_states = n_arcs + n_orig + n_dest
+
+        # Per-state attributes: arc states inherit the node-CSR arrays;
+        # synthetic origin/destination states carry sentinel values.
+        pad_i64 = np.full(n_orig + n_dest, -1, dtype=np.int64)
+        pad_i32 = np.full(n_orig + n_dest, -1, dtype=np.int32)
+        self._lg_st_eid  = np.concatenate(
+            [self._csr_edge_id.astype(np.int64), pad_i64])
+        self._lg_st_dir  = np.concatenate(
+            [self._csr_direction.astype(np.int32), pad_i32])
+        self._lg_st_head = np.concatenate(
+            [self._csr_indices.astype(np.int32), pad_i32])
+        is_net = ((arc_source < n_net)
+                  & (self._csr_indices.astype(np.int32) < n_net))
+        self._lg_st_is_net = np.concatenate(
+            [is_net, np.zeros(n_orig + n_dest, dtype=bool)])
+        self._lg_st_src = np.concatenate([arc_source, pad_i32])
+
+        self._lg_n_arcs   = n_arcs
+        self._lg_n_states = n_states
+        self._lg_o_states = n_arcs + np.arange(n_orig, dtype=np.int64)
+        self._lg_d_states = (n_arcs + n_orig
+                             + np.arange(n_dest, dtype=np.int64))
+        self._lg_indptr   = lg_indptr
+        self._lg_indices  = lg_indices
+        self._lg_weights  = lg_w
+        self._lg_fwd = _scipy_csr(
+            (lg_w, lg_indices, lg_indptr),
+            shape=(n_states, n_states),
+        )
+        self._lg_rev = self._lg_fwd.T.tocsr()
+
+    def _precompute_dest_gradients_turns(self, ns):
+        """Bounded backward Dijkstra from every destination STATE on the
+        reversed line graph. Same sparse (indptr, states, dist, pred)
+        layout and chunking strategy as the node-graph version."""
+        n_dest   = self._n_destinations
+        n_states = self._lg_n_states
+        limit    = self._gradient_limit(ns)
+        d_states = self._lg_d_states
+
+        chunk = max(1, int(1e8 // max(n_states, 1)))
+        idx_parts, dist_parts, pred_parts = [], [], []
+        counts = np.zeros(n_dest, dtype=np.int64)
+        for s in range(0, n_dest, chunk):
+            e = min(s + chunk, n_dest)
+            dist, preds = _scipy_dijkstra(
+                self._lg_rev, directed=True,
+                indices=d_states[s:e],
+                limit=limit,
+                return_predecessors=True,
+            )
+            if dist.ndim == 1:
+                dist, preds = dist[None, :], preds[None, :]
+            finite = np.isfinite(dist)
+            for k in range(e - s):
+                cols = np.where(finite[k])[0]
+                counts[s + k] = cols.shape[0]
+                idx_parts.append(cols.astype(np.int64))
+                dist_parts.append(dist[k, cols].astype(np.float64))
+                pred_parts.append(preds[k, cols].astype(np.int32))
+        indptr = np.zeros(n_dest + 1, dtype=np.int64)
+        np.cumsum(counts, out=indptr[1:])
+        nodes = np.concatenate(idx_parts) if idx_parts else np.zeros(0, np.int64)
+        dist  = np.concatenate(dist_parts) if dist_parts else np.zeros(0, np.float64)
+        pred  = np.concatenate(pred_parts) if pred_parts else np.zeros(0, np.int32)
+        self.logger.log(
+            "AggregateFlow",
+            f"Gradient storage (turn-aware): {nodes.shape[0]:,} finite "
+            f"entries (~{nodes.shape[0]*20/1e6:.0f} MB sparse).",
+            v=2,
+        )
+        return indptr, nodes, dist, pred
+
+    def _process_origins_aggregate_turns(self, dest_grad_sparse, ns) -> None:
+        """Origin loop for the turn-aware pipeline. Structure mirrors
+        ``_process_origins_aggregate``; only the search space (line
+        graph) and the kernel differ."""
+        g_indptr, g_nodes, g_dist, g_pred = dest_grad_sparse
+        n_states  = self._lg_n_states
+        n_net     = self._n_network_nodes
+        n_dest    = self._n_destinations
+        origins   = self.topology.origins
+        dest      = self.topology.destinations
+        n_origins = int(len(origins.node_weight))
+
+        curve_name = ns["path_penalty"]
+        if curve_name == "equal":
+            decay_curve_id = _DECAY_EQUAL
+        elif curve_name == "exponential":
+            decay_curve_id = _DECAY_EXPONENTIAL
+        else:
+            decay_curve_id = _DECAY_LOGISTIC
+        decay_beta     = float(ns["route_beta"])
+        decay_midpoint = float(ns["route_midpoint"]) if ns["route_midpoint"] > 0 else 200.0
+
+        radius            = float(ns["search_radius"])
+        gravity_beta      = float(ns["beta"])
+        use_nearest       = bool(ns["closest_dest"])
+        decay_on          = bool(ns["decay"])
+        decay_curve_dcy   = ns["decay_curve"]
+        use_o_weights     = bool(ns["use_o_weights"])
+        use_d_weights     = bool(ns["use_d_weights"])
+        dest_weights      = np.asarray(dest.node_weight, dtype=np.float64)
+        dest_edge_ids     = np.asarray(dest.nearest_edge_id, dtype=np.int64)
+        d_states          = self._lg_d_states
+
+        mode   = ns["mode"]
+        ratio  = float(ns["ratio"])
+        buffer = float(ns["buffer"])
+        grad_limit = self._gradient_limit(ns)
+
+        st_eid    = self._lg_st_eid
+        st_dir    = self._lg_st_dir
+        st_head   = self._lg_st_head
+        st_is_net = self._lg_st_is_net
+        st_src    = self._lg_st_src
+
+        n_threads = max(1, int(self.num_threads))
+        n_edges   = self.edge_flow_AB.shape[0]
+
+        local_AB = [np.zeros(n_edges, dtype=np.float64) for _ in range(n_threads)]
+        local_BA = [np.zeros(n_edges, dtype=np.float64) for _ in range(n_threads)]
+        if self.node_flow is not None:
+            local_node = [np.zeros(n_net, dtype=np.float64) for _ in range(n_threads)]
+        else:
+            _empty_node = np.zeros(0, dtype=np.float64)
+            local_node  = [_empty_node] * n_threads
+        local_n_gap = [0]   * n_threads
+        local_worst = [0.0] * n_threads
+
+        progress_lock = threading.Lock()
+        n_done        = [0]
+        log_every     = max(1, n_origins // 100)
+
+        def _process_stripe(slot: int) -> None:
+            buf_AB   = local_AB[slot]
+            buf_BA   = local_BA[slot]
+            buf_node = local_node[slot]
+            dd_buf = np.full(n_states, np.inf, dtype=np.float64)
+            pd_buf = np.full(n_states, -9999, dtype=np.int32)
+
+            for o_pos in range(slot, n_origins, n_threads):
+                o_weight = float(origins.node_weight[o_pos])
+                if use_o_weights and o_weight == 0.0:
+                    pass
+                else:
+                    if not use_o_weights:
+                        o_weight = 1.0
+
+                    o_state   = int(self._lg_o_states[o_pos])
+                    o_edge_id = int(origins.nearest_edge_id[o_pos])
+
+                    d_o, pred_o = _scipy_dijkstra(
+                        self._lg_fwd, directed=True,
+                        indices=o_state, limit=grad_limit,
+                        return_predecessors=True,
+                    )
+
+                    d_shortest_arr = d_o[d_states]
+
+                    trip_vols = _compute_trip_volumes(
+                        o_weight, dest_weights, d_shortest_arr,
+                        radius, gravity_beta, decay_on, decay_curve_dcy,
+                        use_nearest, use_d_weights,
+                        ns["decay_method"], float(ns["gravity_cap"]),
+                    )
+
+                    for d_idx in range(n_dest):
+                        d_shortest = float(d_shortest_arr[d_idx])
+                        trip_vol   = float(trip_vols[d_idx])
+                        if trip_vol <= 0.0 or not np.isfinite(d_shortest):
+                            continue
+                        if d_shortest > radius:
+                            continue
+
+                        budget = float(_cutoff_for_shortest(
+                            d_shortest, mode, ratio, buffer,
+                        ))
+
+                        s0, s1 = g_indptr[d_idx], g_indptr[d_idx + 1]
+                        cols = g_nodes[s0:s1]
+                        dd_buf[cols] = g_dist[s0:s1]
+                        pd_buf[cols] = g_pred[s0:s1]
+
+                        delivered = _accumulate_od_flow_turns(
+                            st_eid, st_dir, st_head, st_is_net, st_src,
+                            d_o, dd_buf, pred_o, pd_buf,
+                            o_state, int(d_states[d_idx]),
+                            n_net + d_idx,
+                            o_edge_id, int(dest_edge_ids[d_idx]),
+                            d_shortest, budget,
+                            decay_curve_id, decay_beta, decay_midpoint,
+                            trip_vol,
+                            n_net,
+                            buf_AB, buf_BA, buf_node,
+                        )
+
+                        dd_buf[cols] = np.inf
+                        pd_buf[cols] = -9999
+
+                        gap = abs(delivered - trip_vol)
+                        if gap > 1e-6 * max(1.0, trip_vol):
+                            local_n_gap[slot] += 1
+                            if gap > local_worst[slot]:
+                                local_worst[slot] = gap
+
+                with progress_lock:
+                    n_done[0] += 1
+                    done = n_done[0]
+                    if done % log_every == 0 or done == n_origins:
+                        elapsed = time.perf_counter() - t_loop
+                        rate    = done / elapsed if elapsed > 0 else 0.0
+                        eta_min = (n_origins - done) / rate / 60.0 if rate > 0 else 0.0
+                        self.logger.log(
+                            "AggregateFlow",
+                            f"  origin {done:,}/{n_origins:,} "
+                            f"({100.0*done/n_origins:.1f}%, "
+                            f"{rate:.0f}/s, ETA {eta_min:.1f} min) [turns]",
+                            v=1,
+                        )
+
+        self.logger.log(
+            "AggregateFlow",
+            f"Origin loop (turn-aware): {n_origins:,} origins across "
+            f"{n_threads} thread(s).", v=1,
+        )
+        t_loop = time.perf_counter()
+        if n_threads == 1:
+            _process_stripe(0)
+        else:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=n_threads) as pool:
+                futures = [pool.submit(_process_stripe, slot)
+                           for slot in range(n_threads)]
+                for f in concurrent.futures.as_completed(futures):
+                    f.result()
+
+        for slot in range(n_threads):
+            self.edge_flow_AB += local_AB[slot]
+            self.edge_flow_BA += local_BA[slot]
+            if self.node_flow is not None:
+                self.node_flow += local_node[slot]
+
+        n_gap     = sum(local_n_gap)
+        worst_gap = max(local_worst) if local_worst else 0.0
+
+        self.logger.log(
+            "AggregateFlow",
+            f"Origin loop (turn-aware): {n_origins:,} origins in "
+            f"{time.perf_counter()-t_loop:.2f}s ({n_threads} thread(s)).",
+            v=1,
+        )
+        if n_gap > 0:
+            self.logger.log(
+                "AggregateFlow",
+                f"WARNING: {n_gap} OD pair(s) delivered less than their "
+                f"trip volume (worst gap={worst_gap:.6f}). Rerun with "
+                f"verbosity 2 for per-OD detail.",
+                v=1,
+            )
+
+
 # ======================================================================
 # Trip-volume helper — same semantics as Flow's inline math.
 # ======================================================================
@@ -1214,6 +1525,14 @@ def _compute_trip_volumes(
     if total_g <= 0.0:
         return trips
 
+    if decay_method == "destination_decay":
+        # Legacy Madina convention: each destination decayed by itself,
+        # T_od = W_o x HuffShare_d x decay(d_od). flow_gravity_cap is
+        # ignored. Non-monotonic in opportunity by design — kept for
+        # comparability with older Madina-package results.
+        trips = o_weight * (gravity / total_g) * decay
+        return trips
+
     if decay_method == "gravity_cap":
         cap        = max(gravity_cap, 1e-12)
         total_trip = o_weight * min(total_g / cap, 1.0)
@@ -1223,3 +1542,293 @@ def _compute_trip_volumes(
 
     trips = total_trip * gravity / total_g
     return trips
+
+
+# ======================================================================
+# Turn-aware pipeline (settings.turns = True)
+# ======================================================================
+#
+# The turn-aware path lifts the model onto the LINE GRAPH of the node
+# graph: every directed arc of the node CSR (network arcs AND virtual
+# connector arcs) becomes a STATE, and a transition between two states
+# a -> b exists when head(a) == source(b). Transition weight is
+#
+#     w(b) + turn_cost(source(a), head(a), head(b))
+#
+# with the same geometric node-angle turn rule as the k_alternatives
+# engine (deviation from straight-ahead > turn_threshold at a network
+# node costs turn_penalty; virtual nodes never cost a turn). Immediate
+# reversal onto the same edge (a U-turn) is excluded as a transition
+# entirely, which also zeroes dead-end streets automatically: a
+# cul-de-sac entry state has no admissible continuation, so its
+# backward distance to any destination is infinite.
+#
+# Two synthetic states per analysis complete the picture: one ORIGIN
+# state per origin (transitions to that origin's connector-arc states,
+# weight = connector cost) and one DESTINATION state per destination
+# (transitions from its connector-arc states, weight 0). With these,
+# the whole turns=False algorithm carries over state-for-node:
+#
+#   d_o[s]  forward cost from the origin state, INCLUDING traversal
+#           of arc s;
+#   d_d[s]  backward cost from s onward to the destination state,
+#           EXCLUDING traversal of s;
+#   s is a VIA-STATE with excess = d_o[s] + d_d[s] - d_shortest, the
+#   exact analogue of the node model's via-arc excess (and identical
+#   to it when turn_penalty = 0).
+#
+# Flow loading needs no arc lookups at all: a state IS an arc, so the
+# through-flow accumulated at a state during the two tree passes is
+# attributed directly to that state's edge id / direction, and node
+# flow is attributed at the state's head node.
+#
+# search_radius and the detour budget bound the TURN-INCLUSIVE cost,
+# consistent with how the k_alternatives engine treats turns.
+
+
+@nb.njit(cache=True)
+def _build_line_csr_turns(indptr, indices, weights, edge_id,
+                          n_net_nodes, n_dest, n_orig, node_xy,
+                          thresh_deg, penalty_amt):
+    """Build the line-graph CSR over arc states + synthetic O/D states.
+
+    State layout: [0, n_arcs) node-CSR arcs; [n_arcs, n_arcs+n_orig)
+    origin states; [n_arcs+n_orig, +n_dest) destination states.
+    Returns (line_indptr, line_indices, line_weights, arc_source).
+    """
+    n_arcs = indices.shape[0]
+    n_total_nodes = indptr.shape[0] - 1
+    first_dest = n_net_nodes
+    first_orig = n_net_nodes + n_dest
+    n_states = n_arcs + n_orig + n_dest
+
+    arc_source = np.empty(n_arcs, dtype=np.int32)
+    for u in range(n_total_nodes):
+        for a in range(indptr[u], indptr[u + 1]):
+            arc_source[a] = u
+
+    # ── pass 1: count transitions per state ──────────────────────────
+    line_indptr = np.zeros(n_states + 1, dtype=np.int64)
+    for a in range(n_arcs):
+        h = indices[a]
+        c = 0
+        for b in range(indptr[h], indptr[h + 1]):
+            if indices[b] == arc_source[a] and edge_id[b] == edge_id[a]:
+                continue                     # immediate U-turn
+            c += 1
+        if first_dest <= h < first_orig:
+            c += 1                           # arc into V_d -> D state
+        line_indptr[a + 1] = c
+    for o in range(n_orig):
+        vnode = first_orig + o
+        line_indptr[n_arcs + o + 1] = indptr[vnode + 1] - indptr[vnode]
+    # destination states have no outgoing transitions
+    for i in range(n_states):
+        line_indptr[i + 1] += line_indptr[i]
+
+    n_trans = line_indptr[n_states]
+    line_indices = np.empty(n_trans, dtype=np.int32)
+    line_w       = np.empty(n_trans, dtype=np.float64)
+
+    # ── pass 2: fill ─────────────────────────────────────────────────
+    for a in range(n_arcs):
+        h   = indices[a]
+        src = arc_source[a]
+        pos = line_indptr[a]
+        for b in range(indptr[h], indptr[h + 1]):
+            hb = indices[b]
+            if hb == src and edge_id[b] == edge_id[a]:
+                continue
+            tc = 0.0
+            if (penalty_amt != 0.0 and src < n_net_nodes
+                    and h < n_net_nodes and hb < n_net_nodes):
+                bx = node_xy[h, 0];  by = node_xy[h, 1]
+                raw = math.degrees(
+                    math.atan2(node_xy[hb, 1] - by, node_xy[hb, 0] - bx)
+                    - math.atan2(node_xy[src, 1] - by, node_xy[src, 0] - bx)
+                )
+                if raw < 0.0:
+                    raw += 360.0
+                if abs(np.round(raw) - 180.0) > thresh_deg:
+                    tc = penalty_amt
+            line_indices[pos] = b
+            line_w[pos] = weights[b] + tc
+            pos += 1
+        if first_dest <= h < first_orig:
+            line_indices[pos] = n_arcs + n_orig + (h - first_dest)
+            line_w[pos] = 0.0
+            pos += 1
+    for o in range(n_orig):
+        vnode = first_orig + o
+        pos = line_indptr[n_arcs + o]
+        for b in range(indptr[vnode], indptr[vnode + 1]):
+            line_indices[pos] = b
+            line_w[pos] = weights[b]
+            pos += 1
+
+    return line_indptr, line_indices, line_w, arc_source
+
+
+@nb.njit(cache=True, fastmath=True)
+def _accumulate_od_flow_turns(
+    st_eid, st_dir, st_head, st_is_net, st_src,
+    d_o, d_d, pred_o, pred_d,
+    o_state, d_state, d_vnode,
+    o_edge_id, d_edge_id,
+    d_shortest, budget,
+    decay_curve_id, decay_beta, decay_midpoint,
+    trip_volume,
+    n_net_nodes,
+    out_AB, out_BA, out_node_flow,
+):
+    """Via-STATE flow accumulator on the line graph.
+
+    Mirrors ``_accumulate_od_flow`` state-for-node: every admissible
+    state s (d_o[s] + d_d[s] <= budget) is a via element weighted by
+    decay(excess); its share travels the origin-side predecessor chain,
+    the state itself, and the destination-side predecessor chain. Flow
+    through a state is attributed directly to that state's edge id.
+    Exclusions match the node kernel: the O/D snap edges' own network
+    arcs are never via candidates, and legs contaminated by a snap-edge
+    crossing are excluded via the marking passes. U-turns and dead ends
+    need no handling here — the line graph excludes them structurally.
+    Returns the flow delivered at the destination state.
+    """
+    n_states = d_o.shape[0]
+
+    reach = np.zeros(n_states, dtype=nb.boolean)
+    n_r = 0
+    for v in range(n_states):
+        dov = d_o[v]; ddv = d_d[v]
+        if dov < np.inf and ddv < np.inf and dov + ddv <= budget:
+            reach[v] = True
+            n_r += 1
+    if not reach[d_state] or not reach[o_state]:
+        return 0.0
+
+    reach_states = np.empty(n_r, dtype=np.int64)
+    p = 0
+    for v in range(n_states):
+        if reach[v]:
+            reach_states[p] = v
+            p += 1
+    order_o = reach_states[np.argsort(d_o[reach_states])]
+    order_d = reach_states[np.argsort(d_d[reach_states])]
+
+    # ── leg contamination (crossing the other end's snap edge) ───────
+    cont_o = np.zeros(n_states, dtype=nb.boolean)
+    cont_d = np.zeros(n_states, dtype=nb.boolean)
+    for i in range(n_r):
+        v = order_o[i]
+        pv = pred_o[v]
+        if pv >= 0 and cont_o[pv]:
+            cont_o[v] = True
+        elif st_is_net[v] and st_eid[v] == d_edge_id:
+            cont_o[v] = True
+        elif st_src[v] == d_vnode:
+            cont_o[v] = True      # passing THROUGH own destination point
+    for i in range(n_r):
+        v = order_d[i]
+        pv = pred_d[v]
+        if pv >= 0 and cont_d[pv]:
+            cont_d[v] = True
+        elif st_is_net[v] and st_eid[v] == o_edge_id:
+            cont_d[v] = True
+        elif st_src[v] == d_vnode:
+            cont_d[v] = True      # re-exiting own destination point
+
+    # ── pass 1: total decay weight over via states ───────────────────
+    q_sum = 0.0
+    for i in range(n_r):
+        s = reach_states[i]
+        eid = st_eid[s]
+        if eid < 0:
+            continue                          # synthetic O/D states
+        if st_is_net[s] and (eid == o_edge_id or eid == d_edge_id):
+            continue                          # never walk past O/D point
+        if cont_o[s] or cont_d[s]:
+            continue
+        excess = d_o[s] + d_d[s] - d_shortest
+        if excess < 0.0:
+            excess = 0.0
+        q_sum += _decay(decay_curve_id, decay_beta, decay_midpoint, excess)
+
+    if q_sum <= 0.0:
+        return 0.0
+    scale = trip_volume / q_sum
+
+    # ── pass 2: seed via shares ──────────────────────────────────────
+    acc_o = np.zeros(n_states, dtype=np.float64)
+    acc_d = np.zeros(n_states, dtype=np.float64)
+    has_node = out_node_flow.shape[0] > 0
+    for i in range(n_r):
+        s = reach_states[i]
+        eid = st_eid[s]
+        if eid < 0:
+            continue
+        if st_is_net[s] and (eid == o_edge_id or eid == d_edge_id):
+            continue
+        if cont_o[s] or cont_d[s]:
+            continue
+        excess = d_o[s] + d_d[s] - d_shortest
+        if excess < 0.0:
+            excess = 0.0
+        q = scale * _decay(decay_curve_id, decay_beta, decay_midpoint, excess)
+
+        if st_dir[s] == 0:
+            out_AB[eid] += q
+        else:
+            out_BA[eid] += q
+        if has_node:
+            h = st_head[s]
+            if 0 <= h < n_net_nodes:
+                out_node_flow[h] += q
+        po = pred_o[s]
+        if po >= 0:
+            acc_o[po] += q
+        pd = pred_d[s]
+        if pd >= 0:
+            acc_d[pd] += q
+
+    # ── pass 3: origin legs, descending d_o ──────────────────────────
+    for i in range(n_r - 1, -1, -1):
+        v = order_o[i]
+        f = acc_o[v]
+        if f <= 0.0:
+            continue
+        eid = st_eid[v]
+        if eid >= 0:
+            if st_dir[v] == 0:
+                out_AB[eid] += f
+            else:
+                out_BA[eid] += f
+        if has_node:
+            h = st_head[v]
+            if 0 <= h < n_net_nodes:
+                out_node_flow[h] += f
+        pv = pred_o[v]
+        if pv >= 0:
+            acc_o[pv] += f
+
+    # ── pass 4: destination legs, descending d_d ─────────────────────
+    for i in range(n_r - 1, -1, -1):
+        v = order_d[i]
+        f = acc_d[v]
+        if f <= 0.0:
+            continue
+        if v != d_state:
+            eid = st_eid[v]
+            if eid >= 0:
+                if st_dir[v] == 0:
+                    out_AB[eid] += f
+                else:
+                    out_BA[eid] += f
+            if has_node:
+                h = st_head[v]
+                if 0 <= h < n_net_nodes:
+                    out_node_flow[h] += f
+            pv = pred_d[v]
+            if pv >= 0:
+                acc_d[pv] += f
+
+    return acc_d[d_state]

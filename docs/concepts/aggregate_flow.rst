@@ -121,12 +121,37 @@ decay (:py:data:`../user_guide/settings_reference:flow_decay_method`)
 — follows the same math as the k_alternatives engine.
 
 
+Turn-aware routing
+------------------
+
+Setting ``turns = True`` lifts the model onto the *line graph* of the
+network: every directed arc becomes a search state, turn penalties are
+charged on transitions between states (using the same
+``turn_threshold`` / ``turn_penalty`` settings and geometric node-angle
+rule as the k_alternatives engine), and immediate U-turns are excluded
+structurally — which also zeroes dead-end streets by construction.
+Forward and backward gradients, the via elements, and the flow-loading
+passes all carry over state-for-node, so a run with ``turn_penalty = 0``
+closely reproduces the turn-free result.
+
+Practical notes:
+
+- ``search_radius`` and the detour budget bound the **turn-inclusive**
+  cost, consistent with how k_alternatives treats turns. Deriving
+  gravity caps from turn-aware accessibility keeps the trip-generation
+  elasticity consistent (or use the automatic percentile cap, which
+  does this by construction — see
+  :doc:`../concepts/gravity_and_decay`).
+- Expect roughly 1.5–2× the turn-free runtime and about 3× the
+  destination-gradient memory; for state-scale runs prefer clipped
+  study areas or destination chunking.
+- The ``turns = False`` code path is entirely separate and unaffected
+  by this feature.
+
+
 Current limitations
 -------------------
 
-- **Turn-aware routing** (``turns = True``) is not yet supported — the
-  gradients run on the node graph, not the turn-expanded line graph.
-  The engine raises a clear error rather than silently ignoring turns.
 - **Assigned routing** (``origin_destination_id_column``) is not yet
   supported.
 - **Route-alternatives export**
@@ -144,9 +169,9 @@ When to use which engine
 Use ``aggregate_flow`` (the default) when you want flow spread over
 the complete envelope of viable streets, and for regional and
 state-wide models where the OD count makes enumeration infeasible.
-Switch to ``k_alternatives`` for turn-aware models, assigned OD
-routing, and whenever you need the actual route geometries
-(route-alternatives export).
+Switch to ``k_alternatives`` for assigned OD routing and whenever you
+need the actual route geometries (route-alternatives export). Both
+engines support turn-aware and elevation-aware routing.
 
 
 Related pages

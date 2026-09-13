@@ -167,8 +167,31 @@ class Settings:
     # inside gravity[d] = weight × decay).
     flow_decay: bool = True                   # Apply distance decay to trip generation
     flow_decay_curve: Literal["exponential", "logistic"] = "exponential"
-    flow_decay_method: Literal["closest", "gravity_cap"] = "closest"
-    flow_gravity_cap: float = 1.0               # Required if decay_method = "gravity_cap"; cap value in (destination-weight × decay) units (or count units if d_weights = False)
+    # "destination_decay" is the legacy Madina-package convention kept for
+    # comparability with older results: every destination's trips are
+    # decayed individually, T_od = W_o x HuffShare_d x decay(d_od)
+    # (with use_nearest_destination=True: all trips to the nearest
+    # destination, decayed by its distance). CAUTION: this mode is
+    # non-monotonic in opportunity — adding a farther destination can
+    # REDUCE total trip generation (it dilutes the Huff shares of near
+    # destinations while contributing little decayed volume itself),
+    # which is why "gravity_cap" superseded it. flow_gravity_cap is
+    # ignored in this mode.
+    flow_decay_method: Literal["closest", "gravity_cap", "destination_decay"] = "closest"
+    # flow_gravity_cap accepts either a NUMBER (the cap value in
+    # destination-weight × decay units, or count units if
+    # flow_destination_weights = False) or a PERCENTILE STRING such as
+    # "p95", "p99", or "max".  With a string, RunFlow() first computes
+    # gravity accessibility for the run's own origins/destinations/
+    # network (same engine dispatch as RunAccessibility, so turns and
+    # elevation are honored), takes that percentile of the per-origin
+    # gravity values (zeros included), and uses it as the cap — with an
+    # automatic p95 → p99 → max fallback when the requested percentile
+    # is 0.  The resolved numeric value is logged and written back to
+    # this field for provenance.  NOTE: for scenario comparisons, derive
+    # the cap on the BASELINE run and pin the resolved number in the
+    # scenario run — do not let both legs auto-derive.
+    flow_gravity_cap: float | str = 1.0         # Required if decay_method = "gravity_cap"
 
     flow_path_detour_penalty: Literal["equal", "exponential", "logistic"] = "logistic"
 
@@ -327,6 +350,13 @@ class Settings:
                 elif default is not _dc.MISSING and isinstance(default, bool):
                     s = str(raw).strip().lower()
                     value = s in ('true', 't', '1', 'yes', 'y')
+                elif key == 'flow_gravity_cap':
+                    # Accepts a number or a percentile string ("p95", "max").
+                    s = str(raw).strip()
+                    try:
+                        value = float(s)
+                    except ValueError:
+                        value = s
                 elif default is not _dc.MISSING and isinstance(default, int):
                     value = int(float(str(raw)))
                 elif default is not _dc.MISSING and isinstance(default, float):
@@ -445,17 +475,41 @@ class Settings:
 
         # v2.4.3: flow_gravity_cap is REQUIRED (>0) when
         # flow_decay = True AND flow_decay_method = "gravity_cap".
+        if self.flow_decay and self.flow_decay_method == 'destination_decay':
+            print(
+                "NOTE: flow_decay_method='destination_decay' is the legacy "
+                "Madina-package convention, kept for comparability with older "
+                "results. Trip generation in this mode is non-monotonic in "
+                "opportunity (adding farther destinations can reduce total "
+                "trips) and flow_gravity_cap is ignored. For new analyses "
+                "prefer 'gravity_cap'."
+            )
+
         if self.flow_decay and self.flow_decay_method == 'gravity_cap':
-            cap = float(self.flow_gravity_cap)
-            if cap <= 0.0:
-                errors.append(
-                    f"flow_gravity_cap must be > 0 when "
-                    f"flow_decay_method='gravity_cap'; got {cap}.  Set it to the "
-                    f"gravity value (sum of destination_weight × distance_decay within "
-                    f"search_radius, or destination count if "
-                    f"flow_destination_weights=False) at which an origin's trip "
-                    f"generation should saturate at 100%."
-                )
+            cap = self.flow_gravity_cap
+            if isinstance(cap, str):
+                spec = cap.strip().lower()
+                import re as _re
+                m = _re.fullmatch(r"p(\d{1,2}(?:\.\d+)?)", spec)
+                if spec == "max" or (m and 0.0 < float(m.group(1)) < 100.0):
+                    self.flow_gravity_cap = spec   # normalized; resolved in RunFlow()
+                else:
+                    errors.append(
+                        f"flow_gravity_cap string must be 'max' or a percentile "
+                        f"like 'p95' (0 < NN < 100); got {cap!r}."
+                    )
+            else:
+                cap = float(cap)
+                if cap <= 0.0:
+                    errors.append(
+                        f"flow_gravity_cap must be > 0 when "
+                        f"flow_decay_method='gravity_cap'; got {cap}.  Set it to the "
+                        f"gravity value (sum of destination_weight × distance_decay within "
+                        f"search_radius, or destination count if "
+                        f"flow_destination_weights=False) at which an origin's trip "
+                        f"generation should saturate at 100%, or to a percentile "
+                        f"string like 'p95' to derive it automatically."
+                    )
 
         if self.search_radius <= 0:
             errors.append("search_radius must be > 0")

@@ -14,7 +14,9 @@ weighted origin and destination point layers, and optionally obstacle or observe
   (the default — spreads each OD pair's trips over the full envelope of
   viable routes; scales to regional and state-wide models) and
   `k_alternatives` (enumerates discrete alternative paths; supports
-  turn-aware routing and route-geometry export. Suitable for neighborhood scale analyses).
+  assigned OD routing and route-geometry export. Suitable for
+  neighborhood scale analyses). Both engines support turn-aware and
+  elevation-aware routing.
 
 Impedance can go beyond geometric length: custom "perceived length"
 edge costs, uphill elevation penalties, turn penalties, and obstacle

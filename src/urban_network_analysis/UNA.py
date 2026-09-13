@@ -267,6 +267,99 @@ class UNA:
 
         # should i clean up the topology and accessibility results from memory after export? maybe not, as user might want to run flow after centrality and it would be good to have the topology already built. I can always add a function to clear results from memory if needed.
 
+    def _ResolveGravityCap(self) -> None:
+        """Resolve a percentile-string flow_gravity_cap ("p95", "max")
+        into a numeric cap.
+
+        Runs a gravity accessibility pass with the SAME engine dispatch
+        as RunAccessibility (AccessibilityWTurns when settings.turns,
+        else AccessibilityWElevation), so the derived cap reflects the
+        same network, radius, beta, turn and elevation costs as the
+        flow run that follows. The percentile is taken over ALL origins
+        (zeros included), matching the manual cap-derivation workflow.
+        A p95 -> p99 -> max fallback cascade is applied when the
+        requested percentile is 0. The resolved value is logged and
+        written back to settings.flow_gravity_cap (provenance: saved
+        settings echo the number actually used), and also stored on
+        self.resolved_gravity_cap.
+
+        NOTE (scenario runs): derive the cap on the baseline network
+        and pin the resolved number in the scenario leg; letting both
+        legs auto-derive changes the trip-generation basis between them.
+        """
+        spec = str(self.settings.flow_gravity_cap).strip().lower()
+
+        self.topology.logger.log(
+            "UNA Flow",
+            f"flow_gravity_cap='{spec}': deriving cap from a gravity "
+            f"accessibility pass (turns={self.settings.turns}, "
+            f"elevation={self.settings.elevation}).", v=1,
+        )
+
+        if self.settings.turns:
+            self.settings.cluster_parallel = True
+            n_origins = len(self.topology.origins.geometry)
+            NUM_THREADS = max(1, mp.cpu_count() - 1)
+            self.settings.cluster_workers = NUM_THREADS
+            self.settings.clasters = max(1, min(NUM_THREADS, n_origins))
+            acc = AccessibilityWTurns(self.topology, self.settings)
+        else:
+            acc = AccessibilityWElevation(self.topology, self.settings)
+        acc.Centrality(self.settings)
+
+        if str(self.settings.flow_decay_curve).strip().lower() == "logistic":
+            gravity = np.asarray(acc.gravity_logistic, dtype=np.float64)
+            curve_used = "gravity_logistic"
+        else:
+            gravity = np.asarray(acc.gravity_exponential, dtype=np.float64)
+            curve_used = "gravity_exponential"
+        gravity = gravity[np.isfinite(gravity)]
+        if gravity.size == 0:
+            raise ValueError(
+                "Auto gravity cap failed: the gravity accessibility pass "
+                "produced no finite values."
+            )
+
+        def _value_for(s: str) -> float:
+            if s == "max":
+                return float(gravity.max())
+            return float(np.percentile(gravity, float(s[1:])))
+
+        # Requested spec first, then the p99 -> max fallback cascade
+        # (matching the manual cap-derivation convention).
+        cascade = [spec]
+        if spec != "max":
+            if spec != "p99":
+                cascade.append("p99")
+            cascade.append("max")
+        cap, used = 0.0, spec
+        for s in cascade:
+            cap = _value_for(s)
+            used = s
+            if cap > 0.0:
+                break
+        if cap <= 0.0:
+            raise ValueError(
+                f"Auto gravity cap failed: {curve_used} is 0 for every origin "
+                f"(no origin reaches any destination within search_radius under "
+                f"the current impedance settings). This O-D pair generates no "
+                f"trips; remove the row or revisit the inputs."
+            )
+
+        cap = round(cap, 4)
+        self.settings.flow_gravity_cap = cap
+        self.resolved_gravity_cap = {
+            "spec": spec, "used": used, "value": cap,
+            "metric": curve_used, "n_origins": int(gravity.size),
+        }
+        self.topology.logger.log(
+            "UNA Flow",
+            f"Auto gravity cap resolved: {used} of {curve_used} over "
+            f"{gravity.size:,} origins = {cap}"
+            + (f" (requested {spec} was 0; fell back to {used})" if used != spec else "")
+            + ".", v=1,
+        )
+
     def RunODM(
         self,
         format: str = "Sqlite",
@@ -358,6 +451,16 @@ class UNA:
         self.topology.BuildClusters(n_clusters, self.settings.search_radius)
 
         self.topology.logger.log("UNA Flow", f"Running Flow with {n_clusters} clusters and {NUM_THREADS} threads.", v=1)
+
+        # Auto gravity cap: when flow_gravity_cap is a percentile string
+        # ("p95", "p99", "max"), derive the numeric cap from a gravity
+        # accessibility pass over this run's own origins/destinations/
+        # network before dispatching the flow engine.
+        if (self.settings.flow_decay
+                and str(self.settings.flow_decay_method).strip().lower() == "gravity_cap"
+                and isinstance(self.settings.flow_gravity_cap, str)):
+            self._ResolveGravityCap()
+
 
         # Store the engine on `self` so RunBatch (and any other post-run
         # inspection — e.g., _capture_batch_row's composite-output capture)

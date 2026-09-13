@@ -23,13 +23,13 @@ import urban_network_analysis
 # EDIT THESE THREE VALUES
 # --------------------------------------------------------------------------
 
-PAIRINGS_FILE = r"/path/to/your/pairings.csv"
-OUTPUT_FOLDER = r"/path/to/your/Results"
+PAIRINGS_FILE = r"/Users/andressevtsuk/City Form Lab Dropbox/Andres Sevtsuk/00_ClaudeWork/Maine_KNN/destinations_within_3680m_of_195camercounts/Maine_statewide_betweenness_pairings_3680m_nodeflow_rest.csv"
+OUTPUT_FOLDER = r"/Users/andressevtsuk/City Form Lab Dropbox/Andres Sevtsuk/00_ClaudeWork/Maine_KNN/destinations_within_3680m_of_195camercounts/Results"
 
 # Which analysis to run per row — must match the metric in your pairings CSV:
 #   "accessibility"  — for reach / gravity_* / knn_access composites
 #   "flow"           — for edge_flow or node_flow composites
-ANALYSIS = "accessibility"
+ANALYSIS = "flow"
 
 # --------------------------------------------------------------------------
 # Run the batch (per-row files + optional composite file)

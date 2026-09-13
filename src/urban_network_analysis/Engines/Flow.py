@@ -1661,6 +1661,11 @@ class Flow(Base):
                 ))
             else:
                 origin_factor = math.exp(-ns["beta"] * eff_min)
+        elif ns["decay_method"] == "destination_decay":
+            # Legacy Madina convention: no origin-level factor; each
+            # destination's trips are decayed individually below via
+            # dest_decay_arr (flow_gravity_cap is ignored in this mode).
+            origin_factor = 1.0
         else:  # "gravity_cap"
             # We compute the gravity sum independently for the factor —
             # do NOT reuse `grav_sum` from the Huff trip-distribution
@@ -1689,6 +1694,20 @@ class Flow(Base):
             trip_prob = grav / grav_sum
         else:
             trip_prob = np.full(n_dest_active, 1.0 / n_dest_active)
+
+        # Legacy Madina convention: multiply each destination's share by
+        # its own decay factor, T_od = W_o x HuffShare_d x decay(d_od).
+        # With use_nearest_destination=True only the nearest destination
+        # is active, so this reduces to W_o x decay(d_nearest).
+        if ns["decay"] and ns["decay_method"] == "destination_decay":
+            eff_dd = np.maximum(0.0, d_shortest_arr - ns["plateau"])
+            if ns["decay_curve"] == "logistic":
+                dest_decay_arr = 1.0 / (1.0 + np.exp(
+                    ns["beta"] * (eff_dd - ns["gravity_midpoint"])
+                ))
+            else:
+                dest_decay_arr = np.exp(-ns["beta"] * eff_dd)
+            trip_prob = trip_prob * dest_decay_arr
 
         per_path_factor = path_probs * trip_prob[path_dest_idx]
         if ns["use_o_weights"]:

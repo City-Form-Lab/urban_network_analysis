@@ -142,8 +142,28 @@ class Topology:
         self.logger.log("Network added", f"Network added from source {source_file}, with {len(gdf)} edges.", v=1)
 
         self.network.geometry   = gdf.geometry
-        self.network.weights    = gdf.geometry.length.values.astype(np.float64) if network_cost == "Geometric" else gdf[network_cost].values.astype(np.float64)
-        self.network.lengths    = gdf.geometry.length.values.astype(np.float64) 
+        self.network.lengths    = gdf.geometry.length.values.astype(np.float64)
+        if network_cost == "Geometric":
+            self.network.weights = self.network.lengths.copy()
+        else:
+            weights = gdf[network_cost].values.astype(np.float64)
+            # Guard: NaN or non-positive custom costs would silently
+            # poison Dijkstra (NaN propagates; <=0 is invalid for
+            # shortest paths). Fall back to the segment's geometric
+            # length for those rows and say so loudly.
+            bad = ~np.isfinite(weights) | (weights <= 0.0)
+            if bad.any():
+                n_bad = int(bad.sum())
+                bad_rows = np.where(bad)[0][:10].tolist()
+                weights = np.where(bad, self.network.lengths, weights)
+                self.logger.log(
+                    "Network added",
+                    f"WARNING: network_weight_column '{network_cost}' has "
+                    f"{n_bad} NaN/non-positive value(s); using geometric "
+                    f"length for those segments (first rows: {bad_rows}"
+                    f"{'…' if n_bad > 10 else ''}).", v=1,
+                )
+            self.network.weights = weights
         has_node_data = False
         
         if settings.network_load_nodes:
