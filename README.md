@@ -24,6 +24,12 @@ penalties. Hot loops are Numba-compiled and searches are radius-bounded,
 which keeps large-scale runs feasible. Results export to GeoJSON,
 Feather, and CSV for mapping in QGIS or any GIS.
 
+**Documentation** and **tutorials** for the UNA Python package are found at: https://urban-network-analysis.readthedocs.io/en/latest/index.html
+
+![Estimated foot-traffic volumes in Bangor, ME](docs/images/maine.jpg)
+
+*Estimated foot-traffic volumes in Bangor, ME. From the [Pedestrian Volume Model for Maine Towns](https://cityform.mit.edu/projects/a-pedestrian-volume-model-for-maine-towns) project.*
+
 ## Installation
 
 Two steps — a conda environment for the geospatial dependencies, then
@@ -69,20 +75,9 @@ many analyses from a pairings CSV.
 
 ## Documentation and tutorials
 
-Full documentation lives in [`docs/`](docs/): installation, a
-first-analysis walkthrough, the complete settings reference, concept
-pages on the gravity/decay models and both flow engines, and four
-hands-on tutorials (networks, accessibility, flow, and design-impact
-analysis). The tutorial dataset — a pedestrian network of the Boston
-inner core with building, transit, and amenity layers — ships in
-[`docs/Boston/`](docs/Boston/), so the tutorials run out of the box.
+**Documentation** and **tutorials** for the UNA Python package are found at: https://urban-network-analysis.readthedocs.io/en/latest/index.html
 
-Build the docs locally with Sphinx:
 
-```bash
-pip install -r docs/requirements.txt
-sphinx-build -b html docs docs/_build/html
-```
 
 ## Versioning
 
