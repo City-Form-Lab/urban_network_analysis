@@ -23,8 +23,8 @@ import urban_network_analysis
 # EDIT THESE THREE VALUES
 # --------------------------------------------------------------------------
 
-PAIRINGS_FILE = r"/Users/andressevtsuk/City Form Lab Dropbox/Andres Sevtsuk/00_ClaudeWork/Maine_KNN/destinations_within_3680m_of_195camercounts/Maine_statewide_betweenness_pairings_3680m_nodeflow_rest.csv"
-OUTPUT_FOLDER = r"/Users/andressevtsuk/City Form Lab Dropbox/Andres Sevtsuk/00_ClaudeWork/Maine_KNN/destinations_within_3680m_of_195camercounts/Results"
+PAIRINGS_FILE = r"/path/to/Boston/Boston_Flow_pairings.csv"   # docs/Boston in this repo
+OUTPUT_FOLDER = r"/path/to/Boston/Results"
 
 # Which analysis to run per row — must match the metric in your pairings CSV:
 #   "accessibility"  — for reach / gravity_* / knn_access composites
