@@ -23,7 +23,7 @@ If you have never used UNA before, start with
 your first accessibility map. If you already know the concepts and just want the
 parameters, go straight to the :doc:`user_guide/settings_reference`.
 
-These docs cover UNA version **2.5.5**.
+These docs cover UNA version |release|.
 
 .. toctree::
    :maxdepth: 2

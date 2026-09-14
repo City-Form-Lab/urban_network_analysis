@@ -19,9 +19,12 @@ project   = "UNA"
 author    = "MIT City Form Lab — Andres Sevtsuk, Raul Kalvo"
 copyright = f"{datetime.now().year}, {author}. Released under the MIT License."
 
-# Version string is read from Settings if possible, else falls back.
-version = "2.5.5"
-release = "2.5.5"
+# Version comes from the package itself — the single source of truth is
+# __version__ in src/urban_network_analysis/__init__.py (the sys.path
+# insertion above makes it importable here, same as for autodoc).
+import urban_network_analysis as _una_pkg
+version = _una_pkg.__version__
+release = _una_pkg.__version__
 
 # ---------------------------------------------------------------------------
 # Sphinx extensions

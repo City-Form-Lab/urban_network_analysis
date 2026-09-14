@@ -134,9 +134,12 @@ the shape of the output:
      - Cap on paths per OD pair. ``10`` is lean, ``30–50`` gives richer
        flow patterns.
    * - :py:data:`settings_reference:flow_decay_method`
-     - ``"closest"`` (default) makes trip generation depend on distance
-       to the nearest destination. ``"gravity_cap"`` makes it depend on
-       total gravity — requires calibration.
+     - ``"closest"`` (default) ties trip generation to the nearest
+       destination; ``"gravity_cap"`` to total gravity — set
+       ``flow_gravity_cap`` to a number, or to a percentile string
+       like ``"p95"`` to derive it automatically.
+       ``"destination_decay"`` reproduces the legacy Madina
+       convention.
    * - :py:data:`settings_reference:turns`
      - Turn-aware routing. 2–4× slower but usually essential for a
        defensible model.
