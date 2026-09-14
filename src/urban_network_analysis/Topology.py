@@ -186,6 +186,14 @@ class Topology:
             if self.network.start_nodes  is None:
                 has_node_data = False
 
+        uid_col = (settings.network_uid_column or '').strip()
+        if uid_col and uid_col in gdf.columns:
+            self.network.edge_uid_column = uid_col
+            self.network.edge_uid = gdf[uid_col].values
+        else:
+            self.network.edge_uid_column = None
+            self.network.edge_uid = None
+
         self.network.BuildTopology(discard_redundant_edges=False, precision=settings.network_precision)
 
         # self.BuildTurnPenalties( turn_angle_threshold=settings.turn_threshold, turn_penalty=settings.turn_penalty, store_zero_penalties=False)

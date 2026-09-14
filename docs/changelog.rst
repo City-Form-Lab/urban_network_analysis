@@ -3,6 +3,16 @@ Changelog
 
 This page will track changes in future UNA releases.
 
+.. rubric:: v2.6.1
+
+- **Network edge UID column in flow output.** The ``network_uid_column``
+  setting lets you carry a unique-identifier column from your input
+  network through to the flow output files. Set
+  ``una.settings.network_uid_column = "__GUID"`` (or whatever the column
+  is called) and the flow GeoJSON / feather / CSV will include that
+  column alongside ``edge_id`` and ``flow``, so results can be joined
+  back to the source network without relying on positional edge order.
+
 .. rubric:: v2.6.0
 
 - **Turn-aware aggregate flow.** The ``aggregate_flow`` engine now

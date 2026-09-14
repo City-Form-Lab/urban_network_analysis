@@ -59,8 +59,8 @@ def write_gdf_outputs(
     """Write `gdf` to feather/csv/geojson per the settings.output_* flags.
 
     `desc` (e.g. "network-nodes", "routes") is folded into the log message
-    ("Saved {desc} feather → ...") to preserve each caller's original
-    wording; leave "" for a plain "Saved feather → ...".  Returns whether
+    ("Saved {desc} feather -> ...") to preserve each caller's original
+    wording; leave "" for a plain "Saved feather -> ...".  Returns whether
     anything was written, so callers needing a fallback-format guarantee
     (e.g. UNA.RunBatch's composite export) can act on it.
     """
@@ -70,14 +70,14 @@ def write_gdf_outputs(
     if write_feather and settings.output_feather:
         path = os.path.join(output_folder, file_name + ".feather")
         gdf.to_feather(path)
-        logger.log(label, f"Saved {tag}feather → {path}", v=1)
+        logger.log(label, f"Saved {tag}feather -> {path}", v=1)
         wrote_any = True
 
     if write_csv and settings.output_csv:
         path = os.path.join(output_folder, file_name + ".csv")
         out = gdf.drop(columns="geometry") if (csv_drop_geometry and "geometry" in gdf.columns) else gdf
         out.to_csv(path, sep=settings.csv_delimiter, index=False)
-        logger.log(label, f"Saved {tag}CSV → {path}", v=1)
+        logger.log(label, f"Saved {tag}CSV -> {path}", v=1)
         wrote_any = True
 
     if write_geojson and settings.output_geojson and "geometry" in gdf.columns:
@@ -90,7 +90,7 @@ def write_gdf_outputs(
             )
         except ImportError:
             gdf.to_file(path, driver="GeoJSON")
-        logger.log(label, f"Saved {tag}GeoJSON → {path}", v=1)
+        logger.log(label, f"Saved {tag}GeoJSON -> {path}", v=1)
         wrote_any = True
 
     return wrote_any
@@ -262,22 +262,22 @@ class Base:
             conn = sqlite3.connect(db_path)
             df.to_sql('OD', conn, if_exists='replace', index=False)
             conn.close()
-            self.logger.log('ExportODM', f"→ {db_path} ({len(df)} pairs)", v=1)
+            self.logger.log('ExportODM', f"-> {db_path} ({len(df)} pairs)", v=1)
 
         elif fmt == 'feather':
             feather_path = os.path.join(output_folder, f"{file_name}.feather")
             df.to_feather(feather_path)
-            self.logger.log('ExportODM', f"→ {feather_path} ({len(df)} pairs)", v=1)
+            self.logger.log('ExportODM', f"-> {feather_path} ({len(df)} pairs)", v=1)
 
         elif fmt == 'csv':
             csv_path = os.path.join(output_folder, f"{file_name}.csv")
             df.to_csv(csv_path, sep=',', index=False)
-            self.logger.log('ExportODM', f"→ {csv_path} ({len(df)} pairs)", v=1)
+            self.logger.log('ExportODM', f"-> {csv_path} ({len(df)} pairs)", v=1)
 
         elif fmt == 'tsv':
             tsv_path = os.path.join(output_folder, f"{file_name}.tsv")
             df.to_csv(tsv_path, sep='\t', index=False)
-            self.logger.log('ExportODM', f"→ {tsv_path} ({len(df)} pairs)", v=1)
+            self.logger.log('ExportODM', f"-> {tsv_path} ({len(df)} pairs)", v=1)
 
         else:
             raise ValueError(f"Unknown format '{fmt}'. Use 'Sqlite', 'feather', 'csv', or 'tsv'.")
@@ -300,6 +300,8 @@ class Base:
             "edge_id": np.arange(len(net.weights), dtype=np.int64),
             col_name: self.edge_flow,
         }
+        if getattr(net, "edge_uid", None) is not None:
+            cols[net.edge_uid_column] = net.edge_uid
         if return_directional and self.edge_flow_AB is not None:
             cols[col_name + "_AB"] = self.edge_flow_AB
             cols[col_name + "_BA"] = self.edge_flow_BA
