@@ -88,7 +88,7 @@ Run a quick import check:
 
 .. code-block:: bash
 
-   python -c "import urban_network_analysis; print(urban_network_analysis.__version__)"
+   python -c "import urban_network_analysis; urban_network_analysis.about()"
 
 If the version number prints, you are ready to run your first analysis. Continue to
 :doc:`first_analysis`.
@@ -117,7 +117,15 @@ Verify the version either way:
 .. code-block:: python
 
    import urban_network_analysis
-   print(urban_network_analysis.__version__)   # e.g. 2.6.0
+   urban_network_analysis.about()
+   # UNA — Urban Network Analysis, version 2.6.0 (last public commit: 2026-09-13)
+   # The urban_network_analysis Python package is developed by the MIT City Form Lab.
+   # Website: http://cityform.mit.edu/
+
+The *last public commit* date is captured automatically at install
+time from the GitHub repository, so it tells you exactly how current
+your installed copy is. (``urban_network_analysis.__version__`` still
+returns the bare version string, e.g. ``"2.6.0"``.)
 
 Updates are backward-compatible within a major version — existing
 scripts and pairing tables keep working unchanged. The first run after

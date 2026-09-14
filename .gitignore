@@ -11,6 +11,7 @@ __pycache__/
 # Build artifacts
 dist/
 build/
+src/urban_network_analysis/_build_info.py
 
 # macOS
 .DS_Store

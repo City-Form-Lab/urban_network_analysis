@@ -64,8 +64,13 @@ pip install --upgrade git+https://github.com/City-Form-Lab/urban_network_analysi
 
 ```python
 import urban_network_analysis
-print(urban_network_analysis.__version__)   # e.g. 2.6.0
+urban_network_analysis.about()
+# UNA — Urban Network Analysis, version 2.6.0 (last public commit: 2026-09-13)
+# The urban_network_analysis Python package is developed by the MIT City Form Lab. Website: http://cityform.mit.edu/
 ```
+
+(`urban_network_analysis.__version__` still returns the bare version
+string, e.g. `"2.6.0"`.)
 
 ## Quick start
 

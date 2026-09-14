@@ -59,3 +59,8 @@ path = "src/urban_network_analysis/__init__.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/urban_network_analysis"]
+
+# Build hook: writes src/urban_network_analysis/_build_info.py with the
+# date of the last git commit, so about() can report it at runtime.
+[tool.hatch.build.hooks.custom]
+path = "hatch_build.py"

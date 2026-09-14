@@ -315,10 +315,18 @@ class UNA:
             curve_used = "gravity_exponential"
         gravity = gravity[np.isfinite(gravity)]
         if gravity.size == 0:
-            raise ValueError(
-                "Auto gravity cap failed: the gravity accessibility pass "
-                "produced no finite values."
+            self.topology.logger.log(
+                "UNA Flow",
+                "WARNING: auto gravity cap: the gravity accessibility pass "
+                "produced no finite values. This O-D pair generates no "
+                "trips; the run continues and will output zero flow.", v=1,
             )
+            self.settings.flow_gravity_cap = 1.0
+            self.resolved_gravity_cap = {
+                "spec": spec, "used": "none (no finite gravity)",
+                "value": 1.0, "metric": curve_used, "n_origins": 0,
+            }
+            return
 
         def _value_for(s: str) -> float:
             if s == "max":
@@ -339,12 +347,26 @@ class UNA:
             if cap > 0.0:
                 break
         if cap <= 0.0:
-            raise ValueError(
-                f"Auto gravity cap failed: {curve_used} is 0 for every origin "
-                f"(no origin reaches any destination within search_radius under "
-                f"the current impedance settings). This O-D pair generates no "
-                f"trips; remove the row or revisit the inputs."
+            # Even "max" is 0: no origin reaches any destination within
+            # search_radius under the current impedance settings, so this
+            # O-D pair generates no trips whatever the cap. Warn and use a
+            # placeholder cap of 1.0 — the flow run proceeds and produces
+            # an all-zero result, so a batch continues past this row.
+            self.topology.logger.log(
+                "UNA Flow",
+                f"WARNING: auto gravity cap: {curve_used} is 0 for every "
+                f"origin (no origin reaches any destination within "
+                f"search_radius under the current impedance settings). "
+                f"This O-D pair generates no trips; the run continues and "
+                f"will output zero flow. Remove the row or revisit the "
+                f"inputs to silence this warning.", v=1,
             )
+            self.settings.flow_gravity_cap = 1.0
+            self.resolved_gravity_cap = {
+                "spec": spec, "used": "none (unreachable)", "value": 1.0,
+                "metric": curve_used, "n_origins": int(gravity.size),
+            }
+            return
 
         cap = round(cap, 4)
         self.settings.flow_gravity_cap = cap

@@ -654,7 +654,11 @@ destinations.
    engine dispatch as ``RunAccessibility()``, so turns and elevation
    settings are honored — and takes that percentile of the per-origin
    gravity values (all origins, zeros included). A ``p95 → p99 → max``
-   fallback cascade handles zero-inflated distributions. The resolved
+   fallback cascade handles zero-inflated distributions. If even the
+   maximum is zero — no origin reaches any destination within
+   ``search_radius`` under the run's impedance settings — the run logs
+   a WARNING and continues with zero flow instead of raising, so a
+   batch never dies on an unreachable O-D row. The resolved
    numeric value is logged, written back into the settings (so saved
    settings echo the number actually used), and stored on
    ``una.resolved_gravity_cap``. This guarantees the cap is derived
