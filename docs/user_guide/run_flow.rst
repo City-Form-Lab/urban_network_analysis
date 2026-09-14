@@ -55,19 +55,21 @@ Choosing an engine
    * - ``"aggregate_flow"`` (default since 2.5.5)
      - Distributes each trip across the OD pair's full
        gradient-overlap envelope in one pass — no path enumeration.
+       Turn-aware routing supported since 2.6.0 (line-graph search
+       space; see :doc:`../concepts/aggregate_flow`).
      - Large and state-wide runs; whenever flow should spread over the
-       complete envelope of viable streets. Turns and assigned routing
-       not yet supported.
+       complete envelope of viable streets. Assigned routing and
+       route-alternatives export not supported.
    * - ``"k_alternatives"``
      - Enumerates up to *K* discrete alternative paths per OD pair
        (Plateau's penalty method) and splits the trip among them.
-     - Path-level fidelity; turn-aware routing; assigned routing;
-       route-alternatives export.
+     - Path-level fidelity; assigned routing; route-alternatives
+       export.
 
 Both engines populate the same result arrays and produce the same
-output files, so switching engines is a one-line change. Within the
-``k_alternatives`` engine, turn-aware routing switches on internally
-when :py:data:`settings_reference:turns` = True; there is no separate
+output files, so switching engines is a one-line change. In both
+engines, turn-aware routing switches on internally when
+:py:data:`settings_reference:turns` = True; there is no separate
 class name to worry about. See :doc:`../concepts/k_alternatives` and
 :doc:`../concepts/aggregate_flow` for the math behind each.
 
