@@ -40,3 +40,10 @@ class CustomBuildHook(BuildHookInterface):
                 "# Auto-generated at build time by hatch_build.py — do not edit.\n"
                 f'__commit_date__ = "{commit_date}"\n'
             )
+
+        # The file is gitignored (it must never be committed), and
+        # hatchling excludes VCS-ignored files from the wheel by
+        # default — force-include it so it ships despite .gitignore.
+        build_data.setdefault("force_include", {})[path] = (
+            "urban_network_analysis/_build_info.py"
+        )
