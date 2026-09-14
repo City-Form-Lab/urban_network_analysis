@@ -17,7 +17,7 @@ below; pyproject.toml reads it at build time (hatchling dynamic
 version), so a release is cut by editing this one line.
 """
 
-__version__ = "2.6.0"
+__version__ = "2.6.1"
 
 
 def _commit_date() -> str:

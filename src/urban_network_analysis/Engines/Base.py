@@ -300,6 +300,8 @@ class Base:
             "edge_id": np.arange(len(net.weights), dtype=np.int64),
             col_name: self.edge_flow,
         }
+        if getattr(net, "edge_uid", None) is not None:
+            cols[net.edge_uid_column] = net.edge_uid
         if return_directional and self.edge_flow_AB is not None:
             cols[col_name + "_AB"] = self.edge_flow_AB
             cols[col_name + "_BA"] = self.edge_flow_BA

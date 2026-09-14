@@ -117,6 +117,23 @@ every subsequent layer.
    ``_node_end_id`` columns, UNA reuses them instead of rebuilding node
    IDs from geometry. Speeds up loading for pre-processed feather files.
 
+.. py:data:: network_uid_column
+
+   :Type: ``str``
+   :Default: ``""``
+
+   Column in the network layer that carries a unique identifier for each
+   edge (e.g. a GUID or a stable feature ID from your GIS pipeline).
+   When set, the column is carried through to flow output files alongside
+   ``edge_id`` and ``flow``, so results can be joined back to the source
+   network by a meaningful key rather than positional edge order.
+
+   Set via ``una.settings.network_uid_column = "__GUID"`` or as a column
+   in a batch pairings CSV. Leave empty (the default) to omit the UID
+   column from outputs.
+
+   .. versionadded:: 2.6.1
+
 
 Selecting accessibility metrics
 -------------------------------

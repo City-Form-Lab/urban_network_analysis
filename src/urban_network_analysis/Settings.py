@@ -43,6 +43,7 @@ class Settings:
     network_precision: int = 3 # Define the number of decimal places to round network costs to, for more efficient graph processing (optional)
     network_saved_nodes: bool = False # Define if the node information from the original network file should be preserved in the internal graph representation (optional, default=false). If false, only the node IDs and their connectivity are preserved, which can save memory and speed up processing for large networks. Node id is saved as _node_start_id and _node_end_id in the output files.
     network_load_nodes: bool = True # if True and curve has _node_start_id and _node_end_id is present then we will try to load nodes
+    network_uid_column: str = ""  # Column in the network data to carry through as edge identifier in output files (e.g. "__GUID"). If empty, output uses sequential edge_id.
 
     ##——— CHOOSE WHICH ACCESSIBILITY INDICES TO COMPUTE———
 
