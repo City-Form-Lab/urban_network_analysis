@@ -51,6 +51,22 @@ git clone https://github.com/City-Form-Lab/urban_network_analysis.git
 pip install -e ./urban_network_analysis
 ```
 
+## Updating
+
+To update an existing install to the latest version on GitHub:
+
+```bash
+conda activate una
+pip install --upgrade git+https://github.com/City-Form-Lab/urban_network_analysis.git
+```
+
+(Editable installs from a clone update with `git pull` instead.) Verify:
+
+```python
+import urban_network_analysis
+print(urban_network_analysis.__version__)   # e.g. 2.6.0
+```
+
 ## Quick start
 
 ```python

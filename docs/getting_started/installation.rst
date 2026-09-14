@@ -94,6 +94,37 @@ If the version number prints, you are ready to run your first analysis. Continue
 :doc:`first_analysis`.
 
 
+Updating UNA
+------------
+
+To update an existing install to the latest version on GitHub:
+
+.. code-block:: bash
+
+   conda activate una
+   pip install --upgrade git+https://github.com/City-Form-Lab/urban_network_analysis.git
+
+If you installed in editable mode from a clone, update by pulling
+instead — no reinstall needed:
+
+.. code-block:: bash
+
+   cd urban_network_analysis
+   git pull
+
+Verify the version either way:
+
+.. code-block:: python
+
+   import urban_network_analysis
+   print(urban_network_analysis.__version__)   # e.g. 2.6.0
+
+Updates are backward-compatible within a major version — existing
+scripts and pairing tables keep working unchanged. The first run after
+an update takes an extra ~30–60 seconds while Numba recompiles the
+engine kernels; this is normal.
+
+
 Selecting the interpreter in VS Code
 ------------------------------------
 
