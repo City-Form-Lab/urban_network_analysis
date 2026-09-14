@@ -128,10 +128,20 @@ class Topology:
         gdf = self._get_gdf(source_file, keep_columns=None)
         invalid_types = gdf.geometry.geom_type[gdf.geometry.geom_type != 'LineString'].unique().tolist()
         if invalid_types:
+            # geom_type is NaN (a float) for features with missing/null
+            # geometry — cast to str so the message itself never crashes,
+            # and name the null-geometry case explicitly since it is the
+            # most common cause.
+            type_names = ', '.join(
+                'missing/null geometry' if not isinstance(x, str) else x
+                for x in invalid_types)
+            n_null = int(gdf.geometry.isna().sum() + gdf.geometry.is_empty.fillna(False).sum())
             raise ValueError(
                 f"Network file must contain LineString (line/polyline) geometries, "
-                f"but the file contains: {', '.join(invalid_types)}. "
-                f"Please provide a file with line or polyline geometries."
+                f"but the file contains: {type_names}"
+                + (f" ({n_null} feature(s) with missing/empty geometry — drop them "
+                   f"before loading)" if n_null else "")
+                + ". Please provide a file with line or polyline geometries."
             )
         self.crs = gdf.crs
         if self.crs is None:
