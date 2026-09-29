@@ -32,6 +32,21 @@ Problem types (``settings.fa_problem_type``):
     output. Corresponds to ArcGIS's "Maximize Coverage + Minimize
     Facilities".
 
+``"max_patronage"``
+    Open ``fa_new_facilities`` additional facilities to maximize
+    TOTAL TRIPS GENERATED under the flow engines' gravity-cap
+    trip-generation model:
+
+        maximize  Σ_i w_i · min(1, Σ_{j open} g_ij / cap)
+        g_ij = attraction_j · decay(d_ij),  cap = flow_gravity_cap
+
+    (numeric cap required). Facility attractiveness comes from
+    ``settings.fa_attraction_column`` (unit values when unset). Trips
+    are Huff-split across open facilities in the outputs, so
+    per-facility patronage shows cannibalization of required
+    facilities by newly opened neighbors. Roughly ArcGIS's "Maximize
+    Market Share". Greedy solver only.
+
 Solvers (``settings.fa_solver``): ``"greedy"`` (default — submodular /
 set-cover greedy, deterministic, scales to anything) or ``"exact"``
 (MILP via scipy.optimize.milp/HiGHS; falls back to greedy with a logged
@@ -98,11 +113,41 @@ class FacilityAllocation(AggregateFlow):
         problem = str(s.fa_problem_type).strip().lower()
         solver  = str(s.fa_solver).strip().lower()
 
+        gravity_cap = 0.0
+        if problem == "max_patronage":
+            cap = s.flow_gravity_cap
+            if isinstance(cap, str):
+                raise ValueError(
+                    "fa_problem_type='max_patronage' requires a NUMERIC "
+                    "flow_gravity_cap (the gravity value at which trip "
+                    f"generation saturates); got the percentile string "
+                    f"{cap!r}. Percentile caps are a RunFlow feature — "
+                    "derive the number there (una.resolved_gravity_cap) "
+                    "or from an accessibility run, then set it here."
+                )
+            gravity_cap = float(cap)
+            if gravity_cap <= 0.0:
+                raise ValueError(
+                    "fa_problem_type='max_patronage' requires "
+                    f"flow_gravity_cap > 0; got {gravity_cap}."
+                )
+            if solver == "exact":
+                self.logger.log(
+                    "FacilityAllocation",
+                    "NOTE: fa_solver='exact' is not available for "
+                    "max_patronage (the saturating trip-generation "
+                    "objective does not linearize) — using greedy "
+                    "(near-optimal: the objective is submodular).", v=1,
+                )
+                solver = "greedy"
+
         return dict(
             problem           = problem,
             solver            = solver,
             p_new             = int(s.fa_new_facilities),
             required_column   = (s.fa_required_column or "").strip(),
+            attraction_column = (s.fa_attraction_column or "").strip(),
+            gravity_cap       = gravity_cap,
             search_radius     = float(s.search_radius),
             decay_on          = bool(s.flow_decay),
             decay_curve       = str(s.flow_decay_curve).strip().lower(),
@@ -193,10 +238,18 @@ class FacilityAllocation(AggregateFlow):
             g_indptr, g_nodes, g_dist, ns["search_radius"], first_o
         )
 
-        # 4. Decay-weighted access values g_ij.
-        cand_gain = [
-            self._decay_of(cost, ns) for cost in cand_cost
-        ]
+        # 4. Decay-weighted values g_ij. For max_patronage, candidate
+        #    attractiveness multiplies in (g_ij = attraction_j × decay).
+        if ns["problem"] == "max_patronage":
+            attraction = self._read_attraction(settings, ns["attraction_column"])
+            cand_gain = [
+                attraction[j] * self._decay_of(cand_cost[j], ns)
+                for j in range(self._n_destinations)
+            ]
+        else:
+            cand_gain = [
+                self._decay_of(cost, ns) for cost in cand_cost
+            ]
 
         # 5. Required facilities.
         required = self._read_required_mask(settings, ns["required_column"])
@@ -241,6 +294,11 @@ class FacilityAllocation(AggregateFlow):
                 selected, rank = self._greedy_min_facilities(
                     n_orig, cand_demand, w, required, coverable
                 )
+        elif ns["problem"] == "max_patronage":
+            selected, rank = self._greedy_max_patronage(
+                n_orig, cand_demand, cand_gain, w, required,
+                ns["p_new"], ns["gravity_cap"],
+            )
         else:  # max_access
             if ns["solver"] == "exact":
                 selected, rank = self._milp_max_access(
@@ -252,10 +310,16 @@ class FacilityAllocation(AggregateFlow):
                 )
 
         # 8. Allocation of demand to the chosen configuration + outputs.
-        self._allocate(
-            n_orig, cand_demand, cand_cost, cand_gain, w, selected,
-            rank, required,
-        )
+        if ns["problem"] == "max_patronage":
+            self._allocate_patronage(
+                n_orig, cand_demand, cand_cost, cand_gain, w, selected,
+                rank, required, ns["gravity_cap"],
+            )
+        else:
+            self._allocate(
+                n_orig, cand_demand, cand_cost, cand_gain, w, selected,
+                rank, required,
+            )
         self.has_flow_results = False   # this engine produces no edge flow
 
     # ──────────────────────────────────────────────────────────────────
@@ -351,6 +415,105 @@ class FacilityAllocation(AggregateFlow):
             f"candidates (column '{column}').", v=1,
         )
         return mask
+
+    def _read_attraction(self, settings: Settings, column: str) -> np.ndarray:
+        """Per-candidate attractiveness for max_patronage (hypothesized
+        size for candidates, measured size for existing facilities).
+        Unit values when no column is configured. Re-read from the
+        candidates source file like the required mask."""
+        import os
+        n_dest = self._n_destinations
+        if not column:
+            self.logger.log(
+                "FacilityAllocation",
+                "max_patronage: fa_attraction_column not set — all "
+                "candidates get unit attractiveness.", v=1,
+            )
+            return np.ones(n_dest, dtype=np.float64)
+        source = os.path.join(settings.data_folder, settings.destinations_file)
+        gdf = gpd.read_file(source).reset_index(drop=True)
+        if column not in gdf.columns:
+            raise ValueError(
+                f"fa_attraction_column='{column}' not found in the "
+                f"candidates file {settings.destinations_file}. "
+                f"Available columns: {list(gdf.columns)}."
+            )
+        vals = gdf[column].values.astype(np.float64)
+        bad = ~np.isfinite(vals) | (vals <= 0.0)
+        if bad.any():
+            raise ValueError(
+                f"fa_attraction_column='{column}' has "
+                f"{int(bad.sum())} NaN/non-positive value(s) (rows "
+                f"{np.where(bad)[0][:10].tolist()}). Attractiveness "
+                f"multiplies into every gravity term — fix the source "
+                f"data."
+            )
+        return vals
+
+    def _greedy_max_patronage(self, n_orig, cand_demand, cand_gain, w,
+                              required, p_new, cap):
+        """Greedy maximization of total trips generated:
+
+            objective = Σ_i w_i · min(1, G_i / cap),
+            G_i = Σ_{j open} g_ij,   g_ij = attraction_j · decay(d_ij)
+
+        The gravity-cap trip-generation model from the flow engines:
+        adding facilities raises participation until it saturates at
+        the cap. Monotone submodular (concave of a modular function),
+        so greedy carries the (1 − 1/e) guarantee. Deterministic; ties
+        break on the lower candidate index.
+        """
+        n_dest   = self._n_destinations
+        selected = required.copy()
+        rank     = np.full(n_dest, -1, dtype=np.int64)
+        rank[required] = 0
+
+        G = np.zeros(n_orig, dtype=np.float64)      # Σ g over open set
+        for j in np.where(required)[0]:
+            np.add.at(G, cand_demand[j], cand_gain[j])
+
+        def obj(G_arr):
+            return float((w * np.minimum(1.0, G_arr / cap)).sum())
+
+        base = obj(G)
+        self.logger.log(
+            "FacilityAllocation",
+            f"Baseline trips (required facilities only, cap={cap:g}): "
+            f"{base:,.2f}.", v=1,
+        )
+
+        for step in range(1, p_new + 1):
+            best_j, best_gain = -1, 0.0
+            factor = np.minimum(1.0, G / cap)
+            for j in range(n_dest):
+                if selected[j]:
+                    continue
+                o, g = cand_demand[j], cand_gain[j]
+                if o.shape[0] == 0:
+                    continue
+                gain = float((w[o] * (
+                    np.minimum(1.0, (G[o] + g) / cap) - factor[o]
+                )).sum())
+                if gain > best_gain + 1e-12:
+                    best_j, best_gain = j, gain
+            if best_j < 0:
+                self.logger.log(
+                    "FacilityAllocation",
+                    f"WARNING: stopping after {step-1} of {p_new} new "
+                    f"facilities — every remaining candidate adds zero "
+                    f"trips (demand it reaches is already saturated at "
+                    f"the cap, or it reaches none).", v=1,
+                )
+                break
+            selected[best_j] = True
+            rank[best_j] = step
+            np.add.at(G, cand_demand[best_j], cand_gain[best_j])
+            self.logger.log(
+                "FacilityAllocation",
+                f"Pick {step}: candidate {best_j} (marginal trips "
+                f"{best_gain:,.2f}; total now {obj(G):,.2f}).", v=1,
+            )
+        return selected, rank
 
     def _greedy_max_access(self, n_orig, cand_demand, cand_gain, w,
                            required, p_new):
@@ -757,6 +920,92 @@ class FacilityAllocation(AggregateFlow):
             f"{self.summary['n_new']} new + {self.summary['n_required']} required "
             f"facilities open, demand covered "
             f"{cov_w:,.1f}/{total_w:,.1f} ({self.summary['pct_covered']:.1f}%).",
+            v=1,
+        )
+
+    def _allocate_patronage(self, n_orig, cand_demand, cand_cost,
+                            cand_gain, w, selected, rank, required, cap):
+        """Fill the fa_* arrays for max_patronage.
+
+        Per-demand: trips_i = w_i · min(1, G_i/cap); trips split among
+        open facilities by Huff share g_ij / G_i. Per-facility
+        ``demand_served`` and ``access_captured`` hold the Huff-split
+        demand weight and trips respectively — so required facilities'
+        numbers show cannibalization by newly opened neighbors.
+        ``assigned_facility``/``distance`` report each demand point's
+        LARGEST-share open facility (its primary destination).
+        """
+        n_dest = self._n_destinations
+
+        G        = np.zeros(n_orig, dtype=np.float64)
+        best_g   = np.zeros(n_orig, dtype=np.float64)
+        best_d   = np.full(n_orig, np.inf, dtype=np.float64)
+        assigned = np.full(n_orig, -1, dtype=np.int64)
+
+        open_idx = np.where(selected)[0]
+        for j in open_idx:
+            o, g, c = cand_demand[j], cand_gain[j], cand_cost[j]
+            np.add.at(G, o, g)
+            better = (g > best_g[o] + 1e-12) | (
+                np.isclose(g, best_g[o], rtol=0.0, atol=1e-12)
+                & (c < best_d[o] - 1e-9)
+            )
+            idx = o[better]
+            assigned[idx] = j
+            best_g[idx]   = g[better]
+            best_d[idx]   = c[better]
+
+        covered = G > 0.0
+        factor  = np.minimum(1.0, G / cap)
+        trips   = w * factor
+
+        self.fa_assigned_facility = assigned
+        self.fa_distance          = np.where(covered, best_d, np.nan)
+        self.fa_access            = factor            # trip-generation factor
+        self.fa_covered           = covered.astype(np.int64)
+
+        dest_uid = np.asarray(self.topology.destinations.uid)
+        self.fa_assigned_uid = np.array(
+            [dest_uid[j] if j >= 0 else None for j in assigned], dtype=object
+        )
+
+        # Huff split of demand weight and trips across open facilities.
+        self.fa_selected        = selected.astype(np.int64)
+        self.fa_required        = required.astype(np.int64)
+        self.fa_rank            = rank
+        self.fa_demand_served   = np.zeros(n_dest, dtype=np.float64)
+        self.fa_access_captured = np.zeros(n_dest, dtype=np.float64)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            for j in open_idx:
+                o, g = cand_demand[j], cand_gain[j]
+                share = np.where(G[o] > 0.0, g / G[o], 0.0)
+                self.fa_demand_served[j]   = float((w[o] * share).sum())
+                self.fa_access_captured[j] = float((trips[o] * share).sum())
+
+        total_w   = float(w.sum())
+        cov_w     = float(w[covered].sum())
+        total_tr  = float(trips.sum())
+        self.summary = {
+            "problem_type":           getattr(self, "_problem", "max_patronage"),
+            "solver":                 getattr(self, "_solver_used", "greedy"),
+            "objective_total_access": total_tr,   # = total trips generated
+            "total_trips":            total_tr,
+            "gravity_cap":            float(cap),
+            "n_selected":             int(selected.sum()),
+            "n_required":             int(required.sum()),
+            "n_new":                  int(selected.sum() - required.sum()),
+            "demand_total":           total_w,
+            "demand_covered":         cov_w,
+            "demand_uncovered":       total_w - cov_w,
+            "pct_covered":            100.0 * cov_w / total_w if total_w > 0 else 0.0,
+        }
+        self.logger.log(
+            "FacilityAllocation",
+            f"Allocation done (max_patronage): total trips "
+            f"{total_tr:,.2f}, {self.summary['n_new']} new + "
+            f"{self.summary['n_required']} required facilities open, "
+            f"demand covered {cov_w:,.1f}/{total_w:,.1f} "
+            f"({self.summary['pct_covered']:.1f}%).",
             v=1,
         )
 

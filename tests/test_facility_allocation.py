@@ -282,6 +282,111 @@ def test_turns(folder):
     print("  turn-aware costs (L-network): PASS")
 
 
+def test_max_patronage(folder):
+    """Gravity-cap trip generation, decay off, unit attraction, cap=2:
+    demand i generates w_i * min(1, n_open_reachable/2) trips.
+
+    Reachability at cutoff 300: A reaches the west cluster (30 wt),
+    B the east cluster (3 wt), C reaches x=250 (wt 10) and x=750 (wt 1).
+
+      p=1: A → 30*0.5 = 15;  B → 1.5;  C → 5.5  ⇒ pick A (15 trips)
+      p=2: after A —
+           B adds 3*0.5 = 1.5
+           C adds x=250: 10*(1.0-0.5)=5  +  x=750: 1*0.5=0.5  = 5.5
+           ⇒ pick C (NOT B — the cap rewards doubling up on demand
+             that A only half-saturates). Total = 20.5 trips.
+
+    Allocation with {A, C} open: x=250 generates 10 trips split 5/5
+    between A and C (equal g); C also gets 0.5 from x=750.
+      A: demand_served 5+5+5=... → trips captured 5+5+5 = 15? No:
+      x=0: 5 trips (A only), x=150: 5 trips (A only),
+      x=250: 10 trips split 5/5 ⇒ A captures 15, C captures 5.5.
+    """
+    una = fresh_una(folder)
+    una.settings.fa_problem_type = "max_patronage"
+    una.settings.fa_new_facilities = 2
+    una.settings.flow_gravity_cap = 2.0
+    una.RunFacilityAllocation()
+    e = eng(una)
+    assert e.fa_selected.tolist() == [1, 0, 1], f"selected={e.fa_selected}"
+    assert e.fa_rank.tolist() == [1, -1, 2]
+    assert abs(e.summary["total_trips"] - 20.5) < 1e-9, e.summary
+    # trip-generation factors: west x=0/x=150 → 0.5; x=250 → 1.0;
+    # x=750 → 0.5; east x=900/1000 → 0 (nothing open in reach)
+    assert np.allclose(e.fa_access, [0.5, 0.5, 1.0, 0.5, 0.0, 0.0])
+    # facility patronage (Huff split of trips)
+    assert abs(e.fa_access_captured[0] - 15.0) < 1e-9   # A
+    assert abs(e.fa_access_captured[2] - 5.5) < 1e-9    # C
+    assert e.fa_covered.tolist() == [1, 1, 1, 1, 0, 0]
+
+    # exact solver not available for this mode → logged greedy fallback
+    una = fresh_una(folder)
+    una.settings.fa_problem_type = "max_patronage"
+    una.settings.fa_new_facilities = 1
+    una.settings.flow_gravity_cap = 2.0
+    una.settings.fa_solver = "exact"
+    una.RunFacilityAllocation()
+    assert eng(una).fa_selected.tolist() == [1, 0, 0]
+
+    # percentile-string cap must raise a clear error
+    una = fresh_una(folder)
+    una.settings.fa_problem_type = "max_patronage"
+    una.settings.flow_gravity_cap = "p95"
+    try:
+        una.RunFacilityAllocation()
+        raise AssertionError("string cap should raise for max_patronage")
+    except ValueError:
+        pass
+    print("  max_patronage (cap=2, Huff split): PASS")
+
+
+def test_batch(folder):
+    """Two-row pairing CSV run via RunBatch('facility_allocation') with
+    a composite on fa_access joined onto the shared demand layer."""
+    import pandas as pd
+    rows = pd.DataFrame([
+        dict(name="fa_p1", network_file="net.geojson",
+             origins_file="demand.geojson",
+             destinations_file="candidates.geojson",
+             origin_weight_column="weight", search_radius=300,
+             fa_problem_type="max_access", fa_new_facilities=1,
+             flow_decay="FALSE",
+             output_geojson="TRUE", output_feather="FALSE",
+             output_csv="FALSE", output_wStamp="FALSE",
+             batch_composite_output="TRUE",
+             batch_composite_result_column="fa_access"),
+        dict(name="fa_p2", network_file="net.geojson",
+             origins_file="demand.geojson",
+             destinations_file="candidates.geojson",
+             origin_weight_column="weight", search_radius=300,
+             fa_problem_type="max_access", fa_new_facilities=2,
+             flow_decay="FALSE",
+             output_geojson="TRUE", output_feather="FALSE",
+             output_csv="FALSE", output_wStamp="FALSE",
+             batch_composite_output="TRUE",
+             batch_composite_result_column="fa_access"),
+    ])
+    csv_path = os.path.join(folder, "fa_pairings.csv")
+    rows.to_csv(csv_path, index=False)
+
+    una = UNA(verbosity=0)
+    una.settings.output_folder = os.path.join(folder, "BatchResults")
+    una.RunBatch("facility_allocation", pairing_file=csv_path)
+
+    comp = una.composite_result
+    assert comp is not None and len(comp) > 0
+    gdf = list(comp.values())[0] if isinstance(comp, dict) else comp
+    cols = list(gdf.columns)
+    assert any("fa_access_fa_p1" in c for c in cols), cols
+    assert any("fa_access_fa_p2" in c for c in cols), cols
+    assert len(gdf) == 6                      # joined onto the 6 demand points
+    # row 1 (p=1, coverage): 3 west points have access 1; row 2 adds east
+    a1 = gdf[[c for c in cols if "fa_p1" in c][0]].values
+    a2 = gdf[[c for c in cols if "fa_p2" in c][0]].values
+    assert abs(a1.sum() - 3.0) < 1e-9 and abs(a2.sum() - 6.0) < 1e-9
+    print("  RunBatch facility_allocation + composite: PASS")
+
+
 def test_unservable(folder):
     """Cutoff 120: x=250 and x=750 reach no candidate — unservable.
     min_facilities must still cover the four coverable points with A+B
@@ -313,6 +418,8 @@ def main():
         test_min_facilities(folder)
         test_turns(folder)
         test_unservable(folder)
+        test_max_patronage(folder)
+        test_batch(folder)
         print("ALL PASS")
 
 

@@ -975,7 +975,7 @@ obstacles) apply exactly as in the other engines;
 
 .. py:data:: fa_problem_type
 
-   :Type: ``Literal["max_access", "min_facilities"]``
+   :Type: ``Literal["max_access", "min_facilities", "max_patronage"]``
    :Default: ``"max_access"``
 
    ``"max_access"`` opens ``fa_new_facilities`` additional facilities
@@ -988,7 +988,24 @@ obstacles) apply exactly as in the other engines;
    few facilities as possible while covering every coverable demand
    point — the facility count is the output and
    ``fa_new_facilities`` is ignored. Equivalent to ArcGIS's *Maximize
-   Coverage + Minimize Facilities*.
+   Coverage + Minimize Facilities*. ``"max_patronage"`` maximizes
+   total trips generated under the gravity-cap trip-generation model
+   (demand i generates ``w_i × min(1, Σ g_ij / flow_gravity_cap)``
+   trips with ``g_ij = attraction_j × decay(d_ij)``; NUMERIC cap
+   required), with a Huff split reporting per-facility patronage and
+   cannibalization — roughly ArcGIS's *Maximize Market Share*; greedy
+   solver only.
+
+.. py:data:: fa_attraction_column
+
+   :Type: ``str | None``
+   :Default: ``None``
+
+   ``max_patronage`` only: name of a column on the CANDIDATES layer
+   holding facility attractiveness (floor area, seats, collection
+   size — hypothesized values for proposed sites). Values must be
+   positive. When unset, all candidates get unit attractiveness.
+   Ignored by the other problem types.
 
 .. py:data:: fa_new_facilities
 

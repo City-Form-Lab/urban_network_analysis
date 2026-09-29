@@ -36,8 +36,8 @@ you already know:
   demand is already served.
 
 ``destination_weight_column`` is **ignored** by this engine — candidate
-attractiveness is a market-share concept that belongs to a future
-Huff-based problem type.
+attractiveness enters only through ``fa_attraction_column``, and only
+in the ``max_patronage`` problem type.
 
 
 Problem types
@@ -68,6 +68,34 @@ Problem types
     candidate in range is reported as unservable (with a warning) and
     excluded. Corresponds to ArcGIS's *Maximize Coverage + Minimize
     Facilities*.
+
+``fa_problem_type = "max_patronage"``
+    Open ``fa_new_facilities`` additional facilities to maximize the
+    **total trips generated**, under the same gravity-cap
+    trip-generation model the flow engines use
+    (:doc:`../concepts/gravity_and_decay`):
+
+    .. math::
+
+       \max \;\; \sum_i w_i \cdot \min\!\left(1,\;
+           \frac{\sum_{j \in \text{open}} g_{ij}}{\text{cap}}\right),
+       \qquad g_{ij} = A_j \cdot f(d_{ij})
+
+    where :math:`A_j` is candidate attractiveness
+    (``fa_attraction_column`` on the candidates layer — hypothesized
+    size for proposed sites, measured size for existing ones; unit
+    values when unset) and cap is ``flow_gravity_cap`` (**numeric
+    required** — derive a percentile value from a ``RunFlow`` or
+    accessibility run first). Trips are split among open facilities by
+    Huff share, so the per-facility outputs show *patronage including
+    cannibalization*: opening a site near an existing facility visibly
+    reduces the existing facility's numbers. Unlike ``max_access``,
+    this objective rewards **doubling up** on demand that a single
+    facility only partly activates — with an unsaturated cap, a second
+    facility near heavy demand can beat a first facility near light
+    demand. Roughly corresponds to ArcGIS's *Maximize Market Share*.
+    Greedy solver only (the saturating objective does not linearize;
+    it is submodular, so greedy keeps its guarantee).
 
 
 Solvers
@@ -173,6 +201,21 @@ and footfall from the same impedance model:
 
 A ready-to-edit driver covering the full workflow is in
 ``examples/UNA_FacilityAllocation.py``.
+
+
+Batch runs
+----------
+
+``RunBatch("facility_allocation", pairing_file=...)`` runs one
+facility-allocation analysis per pairing-table row — the ``fa_*``
+fields are ordinary Settings columns, so scenario sweeps (different
+cutoffs, facility counts, problem types, candidate layers) are one
+CSV. Rows with ``batch_composite_output = TRUE`` and
+``batch_composite_result_column = "fa_access"`` (or ``"fa_covered"``)
+also merge their per-demand results into one composite file joined on
+the shared demand layer, exactly like accessibility composites — handy
+for comparing, say, access under 1 vs. 2 vs. 3 new facilities side by
+side in QGIS.
 
 
 Notes and conventions

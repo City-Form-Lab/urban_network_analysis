@@ -35,7 +35,8 @@ class UNA:
     # Extend these sets (and the Literal in Settings.batch_composite_result_column)
     # when adding new metrics.
     _COMPOSITE_PER_ORIGIN_METRICS = {"reach", "gravity_exponential",
-                                      "gravity_logistic", "knn_access"}
+                                      "gravity_logistic", "knn_access",
+                                      "fa_access", "fa_covered"}
     _COMPOSITE_PER_EDGE_METRICS   = {"edge_flow"}
     _COMPOSITE_PER_NODE_METRICS   = {"node_flow"}
 
@@ -116,9 +117,10 @@ class UNA:
             pairing_file: optional path to a .csv / .tsv / .json batch file
         """
         analysis = analysis.lower().strip()
-        if analysis not in ('accessibility', 'flow'):
+        if analysis not in ('accessibility', 'flow', 'facility_allocation'):
             raise ValueError(
-                f"Unknown analysis '{analysis}'. Use 'accessibility' or 'flow'."
+                f"Unknown analysis '{analysis}'. Use 'accessibility', "
+                f"'flow', or 'facility_allocation'."
             )
 
         # Script-level fallback: an output_folder configured on the UNA
@@ -181,10 +183,13 @@ class UNA:
 
             if analysis == 'flow':
                 self.RunFlow()
-                engine = self.flow 
+                engine = self.flow
+            elif analysis == 'facility_allocation':
+                self.RunFacilityAllocation()
+                engine = self.facility_allocation
             else:
                 self.RunAccessibility()
-                engine = self.accessibility 
+                engine = self.accessibility
 
             self._capture_batch_row(s, engine)
 

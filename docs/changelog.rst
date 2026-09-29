@@ -21,7 +21,14 @@ This page will track changes in future UNA releases.
   unservable demand is warned about and reported. Outputs join onto
   the candidates and demand layers plus a JSON summary, and the
   selected facilities chain directly into ``RunFlow()`` as a
-  destinations layer. See :doc:`user_guide/run_facility_allocation`.
+  destinations layer. A third problem type, ``max_patronage``,
+  maximizes total trips generated under the gravity-cap
+  trip-generation model with Huff-split per-facility patronage
+  (candidate attractiveness via ``fa_attraction_column``) — roughly
+  ArcGIS's *Maximize Market Share*. Batch support:
+  ``RunBatch("facility_allocation", pairing_file=...)`` with
+  composite output on ``fa_access`` / ``fa_covered``.
+  See :doc:`user_guide/run_facility_allocation`.
 
 .. rubric:: v2.6.0
 

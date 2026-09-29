@@ -313,17 +313,31 @@ class Settings:
     #                      covering every demand point that can be covered
     #                      within search_radius. fa_new_facilities is
     #                      ignored — the facility count is the output.
+    #   "max_patronage"  — open fa_new_facilities additional facilities to
+    #                      maximize TOTAL TRIPS GENERATED under the
+    #                      gravity-cap trip-generation model: demand i
+    #                      generates w_i x min(1, sum_j g_ij / cap) trips
+    #                      (cap = flow_gravity_cap, NUMERIC required),
+    #                      where g_ij = attraction_j x decay(d_ij), and
+    #                      trips split among open facilities by Huff
+    #                      share — so per-facility outputs show patronage
+    #                      including cannibalization of required
+    #                      facilities. Facility attractiveness comes from
+    #                      fa_attraction_column (unit values when unset).
+    #                      Greedy solver only.
     #
     # fa_solver: "greedy" (default — near-optimal, scales to anything)
     # or "exact" (MILP via scipy; falls back to greedy with a warning
-    # when the problem is oversized or the solver fails).
+    # when the problem is oversized or the solver fails; max_patronage
+    # always uses greedy).
     #
-    # NOTE: destination_weight_column is IGNORED by this engine — candidate
-    # attractiveness is a market-share concept and only enters the future
-    # Huff-based "max_patronage" mode.
-    fa_problem_type: Literal["max_access", "min_facilities"] = "max_access"
+    # NOTE: destination_weight_column is IGNORED by this engine —
+    # candidate attractiveness enters only through fa_attraction_column,
+    # and only in the "max_patronage" mode.
+    fa_problem_type: Literal["max_access", "min_facilities", "max_patronage"] = "max_access"
     fa_new_facilities: int = 1                 # facilities to ADD beyond required ones
     fa_required_column: str | None = None      # truthy column on candidates layer; None/blank = no existing facilities
+    fa_attraction_column: str | None = None    # max_patronage only: attractiveness column on candidates layer (unit values when unset)
     fa_solver: Literal["greedy", "exact"] = "greedy"
 
     ##——— BATCH COMPOSITE OUTPUT (Tool: BatchCompositor) ———
@@ -335,7 +349,8 @@ class Settings:
     batch_composite_output: bool = False                 # master switch — off = current per-row behavior only
     batch_composite_result_column: Literal[
         "reach", "gravity_exponential", "gravity_logistic",
-        "knn_access", "edge_flow", "node_flow"
+        "knn_access", "edge_flow", "node_flow",
+        "fa_access", "fa_covered"
     ] = "knn_access"                                     # which engine attribute to include per row
     batch_composite_column_prefix: str = ""              # prepended to each per-row column name; blank uses row's `name`
     batch_composite_sum_column_name: str = "composite_sum"  # column name for the row-wise sum
@@ -607,10 +622,12 @@ class Settings:
 
         # Facility allocation (fa_problem_type / fa_solver Literals are
         # validated by the generic Literal check above).
-        if int(self.fa_new_facilities) < 1 and self.fa_problem_type == "max_access":
+        if int(self.fa_new_facilities) < 1 \
+                and self.fa_problem_type in ("max_access", "max_patronage"):
             errors.append(
                 f"fa_new_facilities must be >= 1 for "
-                f"fa_problem_type='max_access'; got {self.fa_new_facilities}."
+                f"fa_problem_type='{self.fa_problem_type}'; "
+                f"got {self.fa_new_facilities}."
             )
 
         k_new = int(self.flow_k_nearest_destinations)

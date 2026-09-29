@@ -125,7 +125,11 @@ and run it in one call.
 
 The first argument tells UNA which run method to invoke per row —
 ``"accessibility"`` calls ``RunAccessibility()``, ``"flow"`` calls
-``RunFlow()``. Rows are executed sequentially. Each row's output lands
+``RunFlow()``, and ``"facility_allocation"`` calls
+``RunFacilityAllocation()`` (see
+:doc:`run_facility_allocation`; composites support the per-demand
+``fa_access`` / ``fa_covered`` metrics). Rows are executed
+sequentially. Each row's output lands
 under its own timestamped subfolder inside
 ``<data_folder>/Results/``, labeled with the row's ``name``.
 
