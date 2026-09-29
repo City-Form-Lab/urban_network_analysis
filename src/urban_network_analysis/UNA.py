@@ -513,6 +513,43 @@ class UNA:
             file_name     = self.settings.output_file_name,
         )
 
+    def RunFacilityAllocation(self) -> None:
+        """Optimal facility siting among candidate locations.
+
+        Demand = origins layer (origin_weight_column), candidates =
+        destinations layer, existing facilities marked by a truthy
+        value in settings.fa_required_column. search_radius is the
+        service cutoff; travel is evaluated towards the facility.
+        See settings fa_problem_type / fa_new_facilities / fa_solver.
+
+        Outputs: <name>_facilities.* (selection columns joined on the
+        candidates layer), <name>_demand.* (allocation columns joined
+        on the origins layer), <name>_summary.json.
+        """
+        self.settings.Validation()
+
+        self.topology.AddNetwork(self.settings)
+        self.topology.AddOrigins(self.settings)
+        self.topology.AddDestinations(self.settings)
+
+        # Obstacles raise traversal costs for this engine exactly as
+        # they do for flow/accessibility. Observers are flow-only.
+        if (self.settings.obstacle_points_file or '').strip():
+            self.topology.AddObstacles(self.settings)
+
+        from .Engines.FacilityAllocation import FacilityAllocation
+        self.facility_allocation = FacilityAllocation(self.topology)
+        self.facility_allocation.Centrality(self.settings)
+
+        if self.settings.output_folder is None:
+            self.settings.output_folder = os.path.join(self.settings.data_folder, "Results")
+
+        self.facility_allocation.ExportFacilityAllocationResults(
+            settings      = self.settings,
+            folder_prefix = "facility_allocation_",
+            file_name     = self.settings.output_file_name,
+        )
+
     ## HELPER FUNCTIONS
 
     def ConvertProject_csv_to_json(

@@ -289,6 +289,39 @@ class Settings:
     # weight, fixing the non-monotonicity that affected the gravity-decay
     # implementation in earlier versions.
 
+    ##——— FACILITY ALLOCATION (engine: FacilityAllocation) ———
+    # Optimal siting of facilities among candidate locations, driven by
+    # RunFacilityAllocation(). Demand = origins layer (origin_weight_column),
+    # candidates = destinations layer; already-existing facilities are
+    # marked by a truthy value in fa_required_column on the candidates
+    # layer and are always kept open. search_radius is the cutoff, and
+    # travel is always evaluated TOWARDS the facility (directional
+    # elevation costs accumulate in that direction of travel).
+    #
+    # Problem types:
+    #   "max_access"     — open fa_new_facilities additional facilities so
+    #                      that total demand-weighted access to the nearest
+    #                      open facility is maximized. The access value per
+    #                      demand point mirrors the flow engines'
+    #                      decay_method="closest" trip-generation factor:
+    #                      decay(distance to nearest open facility) using
+    #                      flow_decay_curve / gravity_beta conventions.
+    #                      With flow_decay=False the factor is 1 for any
+    #                      reachable facility, so the objective becomes
+    #                      covered demand (pure coverage maximization).
+    #   "min_facilities" — open as few facilities as possible while
+    #                      covering every demand point that can be covered
+    #                      within search_radius. fa_new_facilities is
+    #                      ignored. (Phase 2 — not yet implemented.)
+    #
+    # NOTE: destination_weight_column is IGNORED by this engine — candidate
+    # attractiveness is a market-share concept and only enters the future
+    # Huff-based "max_patronage" mode.
+    fa_problem_type: Literal["max_access", "min_facilities"] = "max_access"
+    fa_new_facilities: int = 1                 # facilities to ADD beyond required ones
+    fa_required_column: str | None = None      # truthy column on candidates layer; None/blank = no existing facilities
+    fa_solver: Literal["greedy", "exact"] = "greedy"
+
     ##——— BATCH COMPOSITE OUTPUT (Tool: BatchCompositor) ———
     # When RunBatch runs several rows against a shared origins layer, these
     # settings ask UNA to also assemble a single joint output file with one
@@ -567,6 +600,14 @@ class Settings:
                     "requires gravity_logistic_midpoint > 0 (distance at which the "
                     f"factor = 0.5); got {midpoint!r}."
                 )
+
+        # Facility allocation (fa_problem_type / fa_solver Literals are
+        # validated by the generic Literal check above).
+        if int(self.fa_new_facilities) < 1 and self.fa_problem_type == "max_access":
+            errors.append(
+                f"fa_new_facilities must be >= 1 for "
+                f"fa_problem_type='max_access'; got {self.fa_new_facilities}."
+            )
 
         k_new = int(self.flow_k_nearest_destinations)
         k_old = int(self.flow_max_destinations_per_origin)
