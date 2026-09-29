@@ -25,9 +25,17 @@ Problem types (``settings.fa_problem_type``):
     Attendance".
 
 ``"min_facilities"``
-    Fewest facilities covering all coverable demand (Phase 2 — not yet
-    implemented; corresponds to ArcGIS's "Maximize Coverage + Minimize
-    Facilities").
+    Open as few facilities as possible while covering every demand
+    point that CAN be covered within the cutoff (demand with no
+    candidate in range is reported as unservable and excluded).
+    ``fa_new_facilities`` is ignored — the facility count is the
+    output. Corresponds to ArcGIS's "Maximize Coverage + Minimize
+    Facilities".
+
+Solvers (``settings.fa_solver``): ``"greedy"`` (default — submodular /
+set-cover greedy, deterministic, scales to anything) or ``"exact"``
+(MILP via scipy.optimize.milp/HiGHS; falls back to greedy with a logged
+warning when oversized, unavailable, or non-optimal).
 
 Architecture
 ------------
@@ -91,20 +99,7 @@ class FacilityAllocation(AggregateFlow):
                 "settings.turns = False."
             )
         problem = str(s.fa_problem_type).strip().lower()
-        if problem == "min_facilities":
-            raise NotImplementedError(
-                "fa_problem_type='min_facilities' arrives in Phase 2. "
-                "Currently available: 'max_access'."
-            )
-        solver = str(s.fa_solver).strip().lower()
-        if solver == "exact":
-            self.logger.log(
-                "FacilityAllocation",
-                "NOTE: fa_solver='exact' (MILP) arrives in Phase 2 — "
-                "falling back to the greedy solver (near-optimal: "
-                "(1-1/e) guarantee, deterministic).", v=1,
-            )
-            solver = "greedy"
+        solver  = str(s.fa_solver).strip().lower()
 
         return dict(
             problem           = problem,
@@ -191,10 +186,49 @@ class FacilityAllocation(AggregateFlow):
         w = np.asarray(origins.node_weight, dtype=np.float64) \
             if ns["use_o_weights"] else np.ones(n_orig, dtype=np.float64)
 
-        # 7. Greedy selection.
-        selected, rank = self._greedy_max_access(
-            n_orig, cand_demand, cand_gain, w, required, ns["p_new"]
-        )
+        # 6b. Unservable demand: no candidate at all within the cutoff.
+        #     No facility configuration can serve these points — they are
+        #     excluded from every objective and reported as uncovered.
+        coverable = np.zeros(n_orig, dtype=bool)
+        for o in cand_demand:
+            coverable[o] = True
+        n_unserv = int(n_orig - coverable.sum())
+        if n_unserv > 0:
+            w_unserv = float(w[~coverable].sum())
+            self.logger.log(
+                "FacilityAllocation",
+                f"WARNING: {n_unserv:,} of {n_orig:,} demand points "
+                f"(weight {w_unserv:,.1f}) have NO candidate within the "
+                f"cutoff ({ns['search_radius']:.0f}) — unservable by any "
+                f"configuration; they count as uncovered in the outputs. "
+                f"Increase search_radius or add candidates to reach them.",
+                v=1,
+            )
+
+        # 7. Facility selection — problem type × solver dispatch.
+        #    Every path returns (selected mask, rank array); 'exact'
+        #    falls back to greedy with a logged warning if the MILP is
+        #    oversized, unavailable, or fails.
+        self._solver_used = ns["solver"]
+        self._problem     = ns["problem"]
+        if ns["problem"] == "min_facilities":
+            if ns["solver"] == "exact":
+                selected, rank = self._milp_min_facilities(
+                    n_orig, cand_demand, w, required, coverable
+                )
+            else:
+                selected, rank = self._greedy_min_facilities(
+                    n_orig, cand_demand, w, required, coverable
+                )
+        else:  # max_access
+            if ns["solver"] == "exact":
+                selected, rank = self._milp_max_access(
+                    n_orig, cand_demand, cand_gain, w, required, ns["p_new"]
+                )
+            else:
+                selected, rank = self._greedy_max_access(
+                    n_orig, cand_demand, cand_gain, w, required, ns["p_new"]
+                )
 
         # 8. Allocation of demand to the chosen configuration + outputs.
         self._allocate(
@@ -351,6 +385,291 @@ class FacilityAllocation(AggregateFlow):
             )
         return selected, rank
 
+    def _greedy_min_facilities(self, n_orig, cand_demand, w, required,
+                               coverable):
+        """Weighted set-cover greedy: open the fewest facilities that
+        cover every coverable demand point within the cutoff.
+
+        Starts from the required set; each round opens the candidate
+        covering the largest still-uncovered demand weight (ties break
+        on the lower candidate index) until nothing coverable remains
+        uncovered. fa_new_facilities is ignored by design.
+        """
+        n_dest   = self._n_destinations
+        selected = required.copy()
+        rank     = np.full(n_dest, -1, dtype=np.int64)
+        rank[required] = 0
+
+        covered = np.zeros(n_orig, dtype=bool)
+        for j in np.where(required)[0]:
+            covered[cand_demand[j]] = True
+
+        target = coverable & ~covered
+        step = 0
+        while target.any():
+            best_j, best_wt = -1, 0.0
+            for j in range(n_dest):
+                if selected[j]:
+                    continue
+                o = cand_demand[j]
+                if o.shape[0] == 0:
+                    continue
+                wt = float(w[o[target[o]]].sum())
+                if wt > best_wt + 1e-12:
+                    best_j, best_wt = j, wt
+            if best_j < 0:      # cannot happen while target ⊆ coverable
+                break
+            step += 1
+            selected[best_j] = True
+            rank[best_j] = step
+            covered[cand_demand[best_j]] = True
+            target = coverable & ~covered
+            self.logger.log(
+                "FacilityAllocation",
+                f"Pick {step}: candidate {best_j} (newly covered weight "
+                f"{best_wt:,.2f}; uncovered coverable remaining "
+                f"{float(w[target].sum()):,.2f}).", v=1,
+            )
+        self.logger.log(
+            "FacilityAllocation",
+            f"min_facilities (greedy): full coverage of coverable demand "
+            f"with {step} new + {int(required.sum())} required facilities.",
+            v=1,
+        )
+        return selected, rank
+
+    # ──────────────────────────────────────────────────────────────────
+    # Exact MILP solvers (scipy.optimize.milp / HiGHS). Both fall back
+    # to greedy — with a logged warning — when the problem is oversized,
+    # scipy.milp is unavailable, or the solver does not return an
+    # optimal solution.
+    # ──────────────────────────────────────────────────────────────────
+    _MILP_MAX_PAIRS = 3_000_000   # x-variable guard for max_access
+    _MILP_TIME_LIMIT = 600        # seconds
+
+    def _milp_fallback(self, reason, greedy_fn, *args):
+        self.logger.log(
+            "FacilityAllocation",
+            f"WARNING: fa_solver='exact' fell back to greedy — {reason}",
+            v=1,
+        )
+        self._solver_used = "greedy (fallback from exact)"
+        return greedy_fn(*args)
+
+    def _milp_max_access(self, n_orig, cand_demand, cand_gain, w,
+                         required, p_new):
+        """Exact p-median-with-decay MILP.
+
+        Variables: y_j ∈ {0,1} (open), x_p ∈ [0,1] (assignment fraction
+        of demand i(p) to candidate j(p)); LP-integral in x for fixed y.
+            maximize   Σ_p w_i(p)·g_p·x_p
+            s.t.       Σ_{p∈i} x_p ≤ 1          (each demand once)
+                       x_p ≤ y_j(p)             (only open facilities)
+                       Σ_{j∉required} y_j ≤ p_new
+                       y_j = 1  ∀ j required
+        """
+        try:
+            from scipy.optimize import milp, LinearConstraint, Bounds
+            from scipy import sparse as sp
+        except ImportError:
+            return self._milp_fallback(
+                "scipy.optimize.milp unavailable (needs scipy >= 1.9).",
+                self._greedy_max_access,
+                n_orig, cand_demand, cand_gain, w, required, p_new,
+            )
+
+        n_dest  = self._n_destinations
+        pair_o  = np.concatenate(cand_demand) if cand_demand else np.zeros(0, np.int64)
+        pair_g  = np.concatenate(cand_gain)   if cand_gain else np.zeros(0, np.float64)
+        pair_j  = np.concatenate([
+            np.full(cand_demand[j].shape[0], j, dtype=np.int64)
+            for j in range(n_dest)
+        ]) if n_dest else np.zeros(0, np.int64)
+        n_pairs = int(pair_o.shape[0])
+        if n_pairs == 0:
+            return self._milp_fallback(
+                "no demand-candidate pairs within the cutoff.",
+                self._greedy_max_access,
+                n_orig, cand_demand, cand_gain, w, required, p_new,
+            )
+        if n_pairs > self._MILP_MAX_PAIRS:
+            return self._milp_fallback(
+                f"{n_pairs:,} demand-candidate pairs exceed the exact-MILP "
+                f"guard ({self._MILP_MAX_PAIRS:,}); greedy is near-optimal "
+                f"((1-1/e) guarantee) at this scale.",
+                self._greedy_max_access,
+                n_orig, cand_demand, cand_gain, w, required, p_new,
+            )
+
+        n_var = n_dest + n_pairs                      # [y | x]
+        c = np.zeros(n_var, dtype=np.float64)
+        c[n_dest:] = -(w[pair_o] * pair_g)            # milp minimizes
+
+        rows_pairs = np.arange(n_pairs)
+        # (1) Σ_{p∈i} x_p ≤ 1 for each demand with any pair.
+        A1 = sp.csr_matrix(
+            (np.ones(n_pairs), (pair_o, n_dest + rows_pairs)),
+            shape=(n_orig, n_var),
+        )
+        # (2) x_p − y_j(p) ≤ 0.
+        A2 = sp.csr_matrix(
+            (
+                np.concatenate([np.ones(n_pairs), -np.ones(n_pairs)]),
+                (
+                    np.concatenate([rows_pairs, rows_pairs]),
+                    np.concatenate([n_dest + rows_pairs, pair_j]),
+                ),
+            ),
+            shape=(n_pairs, n_var),
+        )
+        # (3) Σ_{j∉required} y_j ≤ p_new.
+        row3 = np.zeros((1, n_var))
+        row3[0, :n_dest] = (~required).astype(np.float64)
+        A3 = sp.csr_matrix(row3)
+
+        A  = sp.vstack([A1, A2, A3], format="csr")
+        ub = np.concatenate([
+            np.ones(n_orig), np.zeros(n_pairs), np.array([float(p_new)]),
+        ])
+        constraints = LinearConstraint(A, -np.inf, ub)
+
+        lb = np.zeros(n_var)
+        hb = np.ones(n_var)
+        lb[:n_dest][required] = 1.0                   # required forced open
+        integrality = np.zeros(n_var)
+        integrality[:n_dest] = 1                      # y binary, x continuous
+
+        res = milp(
+            c=c, constraints=constraints,
+            bounds=Bounds(lb, hb), integrality=integrality,
+            options={"time_limit": self._MILP_TIME_LIMIT},
+        )
+        if res.status != 0 or res.x is None:
+            return self._milp_fallback(
+                f"MILP did not reach optimality (status={res.status}: "
+                f"{res.message}).",
+                self._greedy_max_access,
+                n_orig, cand_demand, cand_gain, w, required, p_new,
+            )
+
+        selected = res.x[:n_dest] > 0.5
+        selected |= required
+        self.logger.log(
+            "FacilityAllocation",
+            f"max_access (exact MILP): objective {-res.fun:,.2f} with "
+            f"{int(selected.sum() - required.sum())} new + "
+            f"{int(required.sum())} required facilities "
+            f"({n_pairs:,} pairs, {n_var:,} variables).", v=1,
+        )
+        rank = self._rank_selection(selected, required, cand_demand,
+                                    cand_gain, w)
+        return selected, rank
+
+    def _milp_min_facilities(self, n_orig, cand_demand, w, required,
+                             coverable):
+        """Exact set-cover MILP: minimize the number of NEW facilities
+        subject to every coverable demand point being covered.
+            minimize   Σ_{j∉required} y_j
+            s.t.       Σ_{j covers i} y_j ≥ 1   ∀ coverable i
+                       y_j = 1  ∀ j required
+        """
+        try:
+            from scipy.optimize import milp, LinearConstraint, Bounds
+            from scipy import sparse as sp
+        except ImportError:
+            return self._milp_fallback(
+                "scipy.optimize.milp unavailable (needs scipy >= 1.9).",
+                self._greedy_min_facilities,
+                n_orig, cand_demand, w, required, coverable,
+            )
+
+        n_dest = self._n_destinations
+        pair_o = np.concatenate(cand_demand) if cand_demand else np.zeros(0, np.int64)
+        pair_j = np.concatenate([
+            np.full(cand_demand[j].shape[0], j, dtype=np.int64)
+            for j in range(n_dest)
+        ]) if n_dest else np.zeros(0, np.int64)
+
+        cov_idx = np.where(coverable)[0]
+        if cov_idx.shape[0] == 0:
+            self.logger.log(
+                "FacilityAllocation",
+                "min_facilities: no coverable demand — nothing to open.",
+                v=1,
+            )
+            rank = np.full(n_dest, -1, dtype=np.int64)
+            rank[required] = 0
+            self._solver_used = "exact"
+            return required.copy(), rank
+
+        remap = np.full(n_orig, -1, dtype=np.int64)
+        remap[cov_idx] = np.arange(cov_idx.shape[0])
+        A = sp.csr_matrix(
+            (np.ones(pair_o.shape[0]), (remap[pair_o], pair_j)),
+            shape=(cov_idx.shape[0], n_dest),
+        )
+        constraints = LinearConstraint(A, 1.0, np.inf)
+
+        c = (~required).astype(np.float64)            # count new only
+        lb = np.zeros(n_dest)
+        lb[required] = 1.0
+        res = milp(
+            c=c, constraints=constraints,
+            bounds=Bounds(lb, np.ones(n_dest)),
+            integrality=np.ones(n_dest),
+            options={"time_limit": self._MILP_TIME_LIMIT},
+        )
+        if res.status != 0 or res.x is None:
+            return self._milp_fallback(
+                f"MILP did not reach optimality (status={res.status}: "
+                f"{res.message}).",
+                self._greedy_min_facilities,
+                n_orig, cand_demand, w, required, coverable,
+            )
+
+        selected = res.x > 0.5
+        selected |= required
+        self.logger.log(
+            "FacilityAllocation",
+            f"min_facilities (exact MILP): full coverage with "
+            f"{int(round(res.fun))} new + {int(required.sum())} required "
+            f"facilities.", v=1,
+        )
+        # Rank the chosen new facilities by coverage contribution
+        # (greedy order restricted to the optimal set).
+        gain_unit = [np.ones_like(cand_demand[j], dtype=np.float64)
+                     for j in range(n_dest)]
+        rank = self._rank_selection(selected, required, cand_demand,
+                                    gain_unit, w)
+        return selected, rank
+
+    def _rank_selection(self, selected, required, cand_demand, cand_gain, w):
+        """Order an already-chosen facility set for the fa_rank output:
+        greedy marginal-gain ordering restricted to the selected set
+        (required = 0, then 1..k by contribution). Deterministic."""
+        n_dest = self._n_destinations
+        rank = np.full(n_dest, -1, dtype=np.int64)
+        rank[required] = 0
+        n_orig = int(len(self.topology.origins.node_weight))
+        best_g = np.zeros(n_orig, dtype=np.float64)
+        for j in np.where(required)[0]:
+            np.maximum.at(best_g, cand_demand[j], cand_gain[j])
+        remaining = list(np.where(selected & ~required)[0])
+        step = 0
+        while remaining:
+            best_j, best_gain = remaining[0], -1.0
+            for j in remaining:
+                o, g = cand_demand[j], cand_gain[j]
+                gain = float((w[o] * np.maximum(0.0, g - best_g[o])).sum()) \
+                       if o.shape[0] else 0.0
+                if gain > best_gain + 1e-12:
+                    best_j, best_gain = j, gain
+            step += 1
+            rank[best_j] = step
+            np.maximum.at(best_g, cand_demand[best_j], cand_gain[best_j])
+            remaining.remove(best_j)
+        return rank
+
     def _allocate(self, n_orig, cand_demand, cand_cost, cand_gain, w,
                   selected, rank, required):
         """Assign each demand point to its best open facility; fill all
@@ -396,6 +715,8 @@ class FacilityAllocation(AggregateFlow):
         total_w = float(w.sum())
         cov_w   = float(w[covered].sum())
         self.summary = {
+            "problem_type":           getattr(self, "_problem", "max_access"),
+            "solver":                 getattr(self, "_solver_used", "greedy"),
             "objective_total_access": float((w * best_g).sum()),
             "n_selected":             int(selected.sum()),
             "n_required":             int(required.sum()),

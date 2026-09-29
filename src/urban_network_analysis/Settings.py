@@ -312,7 +312,11 @@ class Settings:
     #   "min_facilities" — open as few facilities as possible while
     #                      covering every demand point that can be covered
     #                      within search_radius. fa_new_facilities is
-    #                      ignored. (Phase 2 — not yet implemented.)
+    #                      ignored — the facility count is the output.
+    #
+    # fa_solver: "greedy" (default — near-optimal, scales to anything)
+    # or "exact" (MILP via scipy; falls back to greedy with a warning
+    # when the problem is oversized or the solver fails).
     #
     # NOTE: destination_weight_column is IGNORED by this engine — candidate
     # attractiveness is a market-share concept and only enters the future

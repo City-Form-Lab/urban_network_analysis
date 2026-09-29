@@ -173,15 +173,80 @@ def test_outputs_and_errors(folder):
         raise AssertionError("turns=True should raise")
     except ValueError:
         pass
+    print("  outputs + guard errors: PASS")
+
+
+def test_exact_max_access(folder):
+    """Exact MILP must reproduce the (here provably optimal) greedy picks."""
+    for p, exp_sel, exp_obj in ((1, [1, 0, 0], 30.0), (2, [1, 1, 0], 33.0)):
+        una = fresh_una(folder)
+        una.settings.fa_new_facilities = p
+        una.settings.fa_solver = "exact"
+        una.RunFacilityAllocation()
+        e = eng(una)
+        assert e.fa_selected.tolist() == exp_sel, \
+            f"p={p}: selected={e.fa_selected}"
+        assert abs(e.summary["objective_total_access"] - exp_obj) < 1e-9
+        assert e.summary["solver"] == "exact"
+    # exact + decay: same optimum as greedy decay run
+    una = fresh_una(folder)
+    una.settings.fa_new_facilities = 1
+    una.settings.fa_solver = "exact"
+    una.settings.flow_decay = True
+    una.settings.flow_decay_curve = "exponential"
+    una.settings.gravity_beta = 0.004
+    una.RunFacilityAllocation()
+    e = eng(una)
+    assert e.fa_selected.tolist() == [1, 0, 0]
+    expected_obj = 10 * (np.exp(-0.4) + np.exp(-0.2) + np.exp(-0.6))
+    assert abs(e.summary["objective_total_access"] - expected_obj) < 1e-9
+    print("  exact MILP max_access: PASS")
+
+
+def test_min_facilities(folder):
+    """Cutoff 300: A+B cover all six demand points; C is redundant.
+    Expected: exactly {A, B} for both solvers, and B stays fixed when
+    required."""
+    for solver in ("greedy", "exact"):
+        una = fresh_una(folder)
+        una.settings.fa_problem_type = "min_facilities"
+        una.settings.fa_solver = solver
+        una.RunFacilityAllocation()
+        e = eng(una)
+        assert e.fa_selected.tolist() == [1, 1, 0], \
+            f"{solver}: selected={e.fa_selected}"
+        assert e.summary["pct_covered"] == 100.0
+        assert e.summary["n_new"] == 2
 
     una = fresh_una(folder)
+    una.settings.destinations_file = "candidates_Breq.geojson"
+    una.settings.fa_required_column = "required"
     una.settings.fa_problem_type = "min_facilities"
-    try:
+    una.settings.fa_solver = "exact"
+    una.RunFacilityAllocation()
+    e = eng(una)
+    assert e.fa_selected.tolist() == [1, 1, 0]
+    assert e.fa_required.tolist() == [0, 1, 0]
+    assert e.summary["n_new"] == 1                    # only A added
+    print("  min_facilities greedy+exact: PASS")
+
+
+def test_unservable(folder):
+    """Cutoff 120: x=250 and x=750 reach no candidate — unservable.
+    min_facilities must still cover the four coverable points with A+B
+    and report the unservable weight (10 + 1 = 11) as uncovered."""
+    for solver in ("greedy", "exact"):
+        una = fresh_una(folder)
+        una.settings.search_radius = 120
+        una.settings.fa_problem_type = "min_facilities"
+        una.settings.fa_solver = solver
         una.RunFacilityAllocation()
-        raise AssertionError("min_facilities should raise (Phase 2)")
-    except NotImplementedError:
-        pass
-    print("  outputs + guard errors: PASS")
+        e = eng(una)
+        assert e.fa_selected.tolist() == [1, 1, 0], \
+            f"{solver}: selected={e.fa_selected}"
+        assert e.fa_covered.tolist() == [1, 1, 0, 0, 1, 1]
+        assert abs(e.summary["demand_uncovered"] - 11.0) < 1e-9
+    print("  unservable demand (cutoff 120): PASS")
 
 
 def main():
@@ -193,6 +258,9 @@ def main():
         test_required(folder)
         test_decay(folder)
         test_outputs_and_errors(folder)
+        test_exact_max_access(folder)
+        test_min_facilities(folder)
+        test_unservable(folder)
         print("ALL PASS")
 
 
