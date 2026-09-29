@@ -165,15 +165,7 @@ def test_outputs_and_errors(folder):
     with open(os.path.join(out, "fa_test_summary.json")) as f:
         summary = json.load(f)
     assert summary["n_new"] == 2
-
-    una = fresh_una(folder)
-    una.settings.turns = True
-    try:
-        una.RunFacilityAllocation()
-        raise AssertionError("turns=True should raise")
-    except ValueError:
-        pass
-    print("  outputs + guard errors: PASS")
+    print("  outputs: PASS")
 
 
 def test_exact_max_access(folder):
@@ -231,6 +223,65 @@ def test_min_facilities(folder):
     print("  min_facilities greedy+exact: PASS")
 
 
+def test_turns(folder):
+    """L-shaped network with the 90° corner strictly MID-PATH.
+
+    Two engine conventions (inherited from the flow engines) shape the
+    geometry: connector transitions never cost a turn (virtual nodes
+    don't turn), and a destination may be approached from either end
+    of its snap edge via its connectors. So the penalized corner must
+    be between two real network arcs, neither of which is the
+    candidate's snap edge.
+
+    Edges: (0,0)-(100,0), (100,0)-(200,0), (200,0)-(200,100),
+    (200,100)-(200,200). Demand at the west end, candidate snapped to
+    the last edge. Route = 4 × 100 = 400 geometric; one 90° turn at
+    (200,0) between real arcs → +35 (the E3→E4 continuation is
+    straight and free).
+
+      * turns=False, cutoff 410 → covered, distance 400
+      * turns=True,  cutoff 410 → uncovered (435 > 410)
+      * turns=True,  cutoff 500 → covered, distance 435 exactly
+    """
+    sub = os.path.join(folder, "turns")
+    os.makedirs(sub, exist_ok=True)
+    edges = [LineString([(0, 0), (100, 0)]),
+             LineString([(100, 0), (200, 0)]),
+             LineString([(200, 0), (200, 100)]),
+             LineString([(200, 100), (200, 200)])]
+    gpd.GeoDataFrame({"eid": [0, 1, 2, 3]}, geometry=edges, crs=CRS) \
+       .to_file(os.path.join(sub, "net.geojson"), driver="GeoJSON")
+    gpd.GeoDataFrame({"name": ["d0"], "weight": [10]},
+                     geometry=[Point(0, 5)], crs=CRS) \
+       .to_file(os.path.join(sub, "demand.geojson"), driver="GeoJSON")
+    gpd.GeoDataFrame({"name": ["X"], "required": [0]},
+                     geometry=[Point(195, 200)], crs=CRS) \
+       .to_file(os.path.join(sub, "candidates.geojson"), driver="GeoJSON")
+
+    def run(turns, cutoff):
+        una = fresh_una(sub)
+        una.settings.search_radius  = cutoff
+        una.settings.fa_new_facilities = 1
+        una.settings.turns          = turns
+        una.settings.turn_threshold = 45
+        una.settings.turn_penalty   = 35
+        una.RunFacilityAllocation()
+        return eng(una)
+
+    e = run(False, 410)
+    assert e.fa_covered.tolist() == [1] and abs(e.fa_distance[0] - 400.0) < 1e-6, \
+        f"turns off: covered={e.fa_covered}, d={e.fa_distance}"
+
+    e = run(True, 410)
+    assert e.fa_covered.tolist() == [0], \
+        f"turns on, cutoff 410: covered={e.fa_covered} (d={e.fa_distance})"
+
+    e = run(True, 500)
+    assert e.fa_covered.tolist() == [1] and abs(e.fa_distance[0] - 435.0) < 1e-6, \
+        f"turns on, cutoff 500: covered={e.fa_covered}, d={e.fa_distance}"
+    print("  turn-aware costs (L-network): PASS")
+
+
 def test_unservable(folder):
     """Cutoff 120: x=250 and x=750 reach no candidate — unservable.
     min_facilities must still cover the four coverable points with A+B
@@ -260,6 +311,7 @@ def main():
         test_outputs_and_errors(folder)
         test_exact_max_access(folder)
         test_min_facilities(folder)
+        test_turns(folder)
         test_unservable(folder)
         print("ALL PASS")
 

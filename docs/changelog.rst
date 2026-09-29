@@ -3,6 +3,26 @@ Changelog
 
 This page will track changes in future UNA releases.
 
+.. rubric:: v2.7.0
+
+- **Facility Allocation engine.** New ``RunFacilityAllocation()``
+  finds optimal locations for new facilities among candidate sites —
+  UNA's take on location-allocation. Two problem types:
+  ``max_access`` (place *p* facilities to maximize demand-weighted
+  access to the nearest open facility; ArcGIS's *Maximize
+  Attendance*) and ``min_facilities`` (fewest facilities covering all
+  coverable demand; ArcGIS's *Maximize Coverage + Minimize
+  Facilities*). Pre-existing facilities are pinned open via a column
+  on the candidates layer (``fa_required_column``). Deterministic
+  greedy solver (near-optimal, any scale) or exact MILP
+  (``fa_solver="exact"``, scipy/HiGHS, with automatic greedy
+  fallback). Full impedance support: custom edge costs, elevation,
+  turns, obstacles; ``search_radius`` acts as the service cutoff and
+  unservable demand is warned about and reported. Outputs join onto
+  the candidates and demand layers plus a JSON summary, and the
+  selected facilities chain directly into ``RunFlow()`` as a
+  destinations layer. See :doc:`user_guide/run_facility_allocation`.
+
 .. rubric:: v2.6.0
 
 - **Turn-aware aggregate flow.** The ``aggregate_flow`` engine now

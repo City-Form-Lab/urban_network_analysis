@@ -44,6 +44,7 @@ These docs cover UNA version |release|.
    user_guide/run_accessibility
    user_guide/run_flow
    user_guide/run_odm
+   user_guide/run_facility_allocation
    user_guide/run_batch
    user_guide/observers_obstacles
    user_guide/impedance_models

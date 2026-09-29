@@ -41,8 +41,11 @@ Architecture
 ------------
 Subclasses AggregateFlow purely to REUSE its network machinery — the
 directed graph with origin/destination virtual nodes, the CSR build
-(with obstacle penalties and directional elevation costs), and the
-bounded backward Dijkstras from destination virtual nodes. Because the
+(with obstacle penalties and directional elevation costs), the bounded
+backward Dijkstras from destination virtual nodes, and, when
+settings.turns is on, the turn-aware line graph (costs then include
+turn penalties, evaluated in the direction of travel towards the
+facility). Because the
 backward gradient from facility d assigns a distance to every node it
 reaches — including ORIGIN virtual nodes — the sparse gradients ARE the
 demand→facility cost matrix; this engine just harvests the origin
@@ -92,12 +95,6 @@ class FacilityAllocation(AggregateFlow):
     # _prepare_params — this engine reads far fewer fields).
     # ──────────────────────────────────────────────────────────────────
     def _prepare_fa_params(self, s: Settings) -> dict:
-        if bool(s.turns):
-            raise ValueError(
-                "FacilityAllocation does not support turns=True yet "
-                "(turn-aware costs arrive in a later phase). Set "
-                "settings.turns = False."
-            )
         problem = str(s.fa_problem_type).strip().lower()
         solver  = str(s.fa_solver).strip().lower()
 
@@ -112,6 +109,9 @@ class FacilityAllocation(AggregateFlow):
             gravity_beta      = float(s.gravity_beta),
             elevation         = bool(s.elevation),
             elevation_penalty = float(s.elevation_penalty),
+            use_turns         = bool(s.turns),
+            turn_thresh       = float(s.turn_threshold),
+            turn_amt          = float(s.turn_penalty),
             use_o_weights     = bool(s.flow_origin_weights),
         )
 
@@ -136,7 +136,10 @@ class FacilityAllocation(AggregateFlow):
             f"decay={ns['decay_on']}"
             + (f" (curve={ns['decay_curve']}, beta={ns['gravity_beta']})"
                if ns["decay_on"] else "")
-            + f", elevation={ns['elevation']}.",
+            + f", elevation={ns['elevation']}, turns={ns['use_turns']}"
+            + (f" (threshold={ns['turn_thresh']:.0f} deg, "
+               f"penalty={ns['turn_amt']:.1f})" if ns["use_turns"] else "")
+            + ".",
             v=1,
         )
         if ns["decay_on"] and ns["decay_curve"] != "logistic" \
@@ -155,21 +158,39 @@ class FacilityAllocation(AggregateFlow):
         )
         self._build_csr()
 
-        # 2. Backward gradients from every candidate virtual node,
-        #    bounded at the cutoff (see _gradient_limit override).
+        # 2. Backward gradients from every candidate, bounded at the
+        #    cutoff (see _gradient_limit override). Turn-aware runs use
+        #    the inherited line-graph machinery: origin STATES occupy a
+        #    contiguous block exactly like origin virtual nodes do in
+        #    the node graph, so the same harvesting works on both paths.
         t0 = time.perf_counter()
-        g_indptr, g_nodes, g_dist, _g_pred = self._precompute_dest_gradients(ns)
+        if ns["use_turns"]:
+            self._build_line_graph_turns(ns)
+            self.logger.log(
+                "FacilityAllocation",
+                f"Line graph (turn-aware): {self._lg_n_states:,} states "
+                f"(threshold={ns['turn_thresh']:.0f} deg, "
+                f"penalty={ns['turn_amt']:.1f}).", v=1,
+            )
+            g_indptr, g_nodes, g_dist, _g_pred = \
+                self._precompute_dest_gradients_turns(ns)
+            first_o = int(self._lg_n_arcs)          # origin states block
+        else:
+            g_indptr, g_nodes, g_dist, _g_pred = \
+                self._precompute_dest_gradients(ns)
+            first_o = int(self._first_origin_node)  # origin virtual nodes
         self.logger.log(
             "FacilityAllocation",
             f"Backward gradients: {self._n_destinations} candidates in "
-            f"{time.perf_counter()-t0:.2f}s (limit={ns['search_radius']:.0f}).",
+            f"{time.perf_counter()-t0:.2f}s (limit={ns['search_radius']:.0f}, "
+            f"turns={ns['use_turns']}).",
             v=1,
         )
 
         # 3. Harvest the demand→candidate cost matrix from the origin
-        #    virtual-node entries of each gradient.
+        #    entries of each gradient.
         cand_demand, cand_cost = self._extract_od_costs(
-            g_indptr, g_nodes, g_dist, ns["search_radius"]
+            g_indptr, g_nodes, g_dist, ns["search_radius"], first_o
         )
 
         # 4. Decay-weighted access values g_ij.
@@ -240,16 +261,19 @@ class FacilityAllocation(AggregateFlow):
     # ──────────────────────────────────────────────────────────────────
     # Stage helpers.
     # ──────────────────────────────────────────────────────────────────
-    def _extract_od_costs(self, g_indptr, g_nodes, g_dist, cutoff):
+    def _extract_od_costs(self, g_indptr, g_nodes, g_dist, cutoff, first_o):
         """Per-candidate arrays of (demand index, cost) within cutoff.
 
-        Origin virtual nodes occupy CSR indices
-        [_first_origin_node, _first_origin_node + n_origins); the
-        backward gradient of candidate d holds, at those indices, the
-        exact shortest 'towards facility' cost origin→candidate
-        (connector arcs included on both ends).
+        ``first_o`` is the index of the first origin entry in the
+        gradient's index space: origin VIRTUAL NODES in the node graph
+        (turns=False), origin STATES in the line graph (turns=True).
+        Either way origins occupy the contiguous block
+        [first_o, first_o + n_origins), and the backward gradient of
+        candidate d holds, at those indices, the exact shortest
+        'towards facility' cost origin→candidate (connector arcs on
+        both ends; turn penalties included on the turn-aware path).
         """
-        first_o = self._first_origin_node
+        n_orig  = self._n_origins
         n_dest  = self._n_destinations
         cand_demand, cand_cost = [], []
         n_entries = 0
@@ -257,7 +281,8 @@ class FacilityAllocation(AggregateFlow):
             lo, hi = g_indptr[d], g_indptr[d + 1]
             nodes  = g_nodes[lo:hi]
             dist   = g_dist[lo:hi]
-            m      = (nodes >= first_o) & (dist <= cutoff + 1e-9)
+            m      = ((nodes >= first_o) & (nodes < first_o + n_orig)
+                      & (dist <= cutoff + 1e-9))
             o_idx  = (nodes[m] - first_o).astype(np.int64)
             cand_demand.append(o_idx)
             cand_cost.append(dist[m].astype(np.float64))

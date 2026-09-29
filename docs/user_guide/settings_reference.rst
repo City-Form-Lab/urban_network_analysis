@@ -961,6 +961,70 @@ Flow — output and tracking options
    file that many downstream visualizations expect.
 
 
+Facility allocation
+-------------------
+
+These fields drive ``RunFacilityAllocation()`` — optimal siting of
+facilities among candidate locations. Demand = the origins layer,
+candidates = the destinations layer; ``search_radius`` is the service
+cutoff and travel is always evaluated towards the facility. Impedance
+settings (``network_weight_column``, ``elevation``, ``turns``,
+obstacles) apply exactly as in the other engines;
+``destination_weight_column`` is ignored. See
+:doc:`run_facility_allocation`.
+
+.. py:data:: fa_problem_type
+
+   :Type: ``Literal["max_access", "min_facilities"]``
+   :Default: ``"max_access"``
+
+   ``"max_access"`` opens ``fa_new_facilities`` additional facilities
+   to maximize total demand-weighted access to the nearest open
+   facility (decay per ``flow_decay`` / ``flow_decay_curve`` /
+   ``gravity_beta``, mirroring the flow engines'
+   ``flow_decay_method="closest"`` convention; with
+   ``flow_decay=False`` the objective is covered demand). Equivalent
+   to ArcGIS's *Maximize Attendance*. ``"min_facilities"`` opens as
+   few facilities as possible while covering every coverable demand
+   point — the facility count is the output and
+   ``fa_new_facilities`` is ignored. Equivalent to ArcGIS's *Maximize
+   Coverage + Minimize Facilities*.
+
+.. py:data:: fa_new_facilities
+
+   :Type: ``int``
+   :Default: ``1``
+
+   How many facilities to ADD beyond the required (pre-existing) ones
+   in ``max_access`` runs. Must be ≥ 1 for that problem type; ignored
+   by ``min_facilities``.
+
+.. py:data:: fa_required_column
+
+   :Type: ``str | None``
+   :Default: ``None``
+
+   Name of a column on the CANDIDATES (destinations) layer whose
+   truthy values (1 / TRUE / yes) mark facilities that already exist.
+   Required facilities are always kept open: they anchor the baseline
+   and the optimizer sites new facilities around them. Leave ``None``
+   for a greenfield run with no existing facilities.
+
+.. py:data:: fa_solver
+
+   :Type: ``Literal["greedy", "exact"]``
+   :Default: ``"greedy"``
+
+   ``"greedy"`` is the deterministic marginal-gain solver —
+   near-optimal ((1 − 1/e) guarantee for ``max_access``), scales to
+   any size, and yields the ``rank`` pick-order output.
+   ``"exact"`` solves the MILP optimally via ``scipy.optimize.milp``
+   (HiGHS); when the problem is oversized (> 3M demand-candidate
+   pairs), scipy is too old, or the solver fails/times out, the run
+   falls back to greedy with a logged warning and records the
+   fallback in the summary output.
+
+
 Batch composite output
 ----------------------
 
