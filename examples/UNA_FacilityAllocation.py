@@ -94,7 +94,9 @@ s.elevation            = False   # True with a 3D network
 s.turns                = False   # True for turn-aware costs
 
 s.output_folder        = OUTPUT_FOLDER
-s.output_wStamp        = False
+# output_wStamp defaults to True: each run writes into a new
+# timestamped subfolder, never overwriting earlier results — the same
+# convention as accessibility and flow runs.
 s.output_geojson       = True
 s.output_file_name     = "fa_run"
 
@@ -105,13 +107,19 @@ una.RunFacilityAllocation()
 # --------------------------------------------------------------------------
 
 if RUN_FLOW_ON_RESULT:
-    # These are only needed for the chaining step: geopandas reads the
-    # facilities output back in to filter the selected sites, os joins
-    # the file paths. Part 1 needs neither.
+    # Only needed for the chaining step (Part 1 needs neither): the
+    # chosen facilities are taken straight from the engine's in-memory
+    # results — timestamp-proof, no reading output files back in.
     import os
     import geopandas as gpd
 
-    fac = gpd.read_file(os.path.join(OUTPUT_FOLDER, "fa_run_facilities.geojson"))
+    e = una.facility_allocation
+    dest = una.topology.destinations
+    fac = gpd.GeoDataFrame(
+        {"uid": list(dest.uid), "selected": e.fa_selected},
+        geometry=gpd.GeoSeries(dest.geometry).reset_index(drop=True),
+        crs=getattr(dest.geometry, "crs", None),
+    )
     chosen = fac[fac["selected"] == 1]
     chosen_file = "chosen_facilities.geojson"
     chosen.to_file(os.path.join(DATA_FOLDER, chosen_file), driver="GeoJSON")

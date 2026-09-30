@@ -193,7 +193,15 @@ and footfall from the same impedance model:
 
    import geopandas as gpd
 
-   fac = gpd.read_file("Results/fa_libraries_facilities.geojson")
+   # Take the selection straight from the engine's in-memory results
+   # (timestamp-proof — no need to locate the run's output subfolder).
+   e    = project.facility_allocation
+   dest = project.topology.destinations
+   fac  = gpd.GeoDataFrame(
+       {"uid": list(dest.uid), "selected": e.fa_selected},
+       geometry=gpd.GeoSeries(dest.geometry).reset_index(drop=True),
+       crs=getattr(dest.geometry, "crs", None),
+   )
    fac[fac["selected"] == 1].to_file("Portland/chosen_libraries.geojson",
                                      driver="GeoJSON")
 
