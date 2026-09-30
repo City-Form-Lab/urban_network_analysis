@@ -318,12 +318,15 @@ class Settings:
     #                      gravity-cap trip-generation model: demand i
     #                      generates w_i x min(1, sum_j g_ij / cap) trips
     #                      (cap = flow_gravity_cap, NUMERIC required),
-    #                      where g_ij = attraction_j x decay(d_ij), and
+    #                      where g_ij = dest_weight_j x decay(d_ij), and
     #                      trips split among open facilities by Huff
     #                      share — so per-facility outputs show patronage
     #                      including cannibalization of required
     #                      facilities. Facility attractiveness comes from
-    #                      fa_attraction_column (unit values when unset).
+    #                      destination_weight_column — the same role
+    #                      destination weights play in RunFlow's Huff
+    #                      model (unit values when the column is unset;
+    #                      supply hypothesized sizes for candidate sites).
     #                      Greedy solver only.
     #
     # fa_solver: "greedy" (default — near-optimal, scales to anything)
@@ -331,13 +334,12 @@ class Settings:
     # when the problem is oversized or the solver fails; max_patronage
     # always uses greedy).
     #
-    # NOTE: destination_weight_column is IGNORED by this engine —
-    # candidate attractiveness enters only through fa_attraction_column,
-    # and only in the "max_patronage" mode.
+    # NOTE: destination_weight_column is IGNORED by max_access and
+    # min_facilities; in max_patronage it supplies facility
+    # attractiveness, exactly as in RunFlow's Huff model.
     fa_problem_type: Literal["max_access", "min_facilities", "max_patronage"] = "max_access"
     fa_new_facilities: int = 1                 # facilities to ADD beyond required ones
     fa_required_column: str | None = None      # truthy column on candidates layer; None/blank = no existing facilities
-    fa_attraction_column: str | None = None    # max_patronage only: attractiveness column on candidates layer (unit values when unset)
     fa_solver: Literal["greedy", "exact"] = "greedy"
 
     ##——— BATCH COMPOSITE OUTPUT (Tool: BatchCompositor) ———

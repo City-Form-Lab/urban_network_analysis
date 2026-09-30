@@ -970,8 +970,9 @@ candidates = the destinations layer; ``search_radius`` is the service
 cutoff and travel is always evaluated towards the facility. Impedance
 settings (``network_weight_column``, ``elevation``, ``turns``,
 obstacles) apply exactly as in the other engines;
-``destination_weight_column`` is ignored. See
-:doc:`run_facility_allocation`.
+``destination_weight_column`` is ignored by ``max_access`` and
+``min_facilities``, and supplies facility attractiveness in
+``max_patronage``. See :doc:`run_facility_allocation`.
 
 .. py:data:: fa_problem_type
 
@@ -991,21 +992,14 @@ obstacles) apply exactly as in the other engines;
    Coverage + Minimize Facilities*. ``"max_patronage"`` maximizes
    total trips generated under the gravity-cap trip-generation model
    (demand i generates ``w_i × min(1, Σ g_ij / flow_gravity_cap)``
-   trips with ``g_ij = attraction_j × decay(d_ij)``; NUMERIC cap
+   trips with ``g_ij = dest_weight_j × decay(d_ij)``; NUMERIC cap
    required), with a Huff split reporting per-facility patronage and
    cannibalization — roughly ArcGIS's *Maximize Market Share*; greedy
-   solver only.
-
-.. py:data:: fa_attraction_column
-
-   :Type: ``str | None``
-   :Default: ``None``
-
-   ``max_patronage`` only: name of a column on the CANDIDATES layer
-   holding facility attractiveness (floor area, seats, collection
-   size — hypothesized values for proposed sites). Values must be
-   positive. When unset, all candidates get unit attractiveness.
-   Ignored by the other problem types.
+   solver only. Facility attractiveness comes from
+   ``destination_weight_column`` — the same role destination weights
+   play in ``RunFlow()``'s Huff model (floor area, seats, collection
+   size; hypothesized values for proposed sites; unit values when the
+   column is unset).
 
 .. py:data:: fa_new_facilities
 

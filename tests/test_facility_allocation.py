@@ -337,7 +337,32 @@ def test_max_patronage(folder):
         raise AssertionError("string cap should raise for max_patronage")
     except ValueError:
         pass
-    print("  max_patronage (cap=2, Huff split): PASS")
+
+    # weighted attractiveness via destination_weight_column:
+    # attr A=1, B=1, C=2; cap=2, decay off, p=2.
+    #   pick 1: A (west cluster, 30*0.5 = 15 trips)
+    #   pick 2: C — x=250: G 1→3, factor 0.5→1 → +5;
+    #               x=750: G 0→2, factor 0→1  → +1;  gain 6 (B: 1.5)
+    #   total = 21. Huff with {A, C}: x=250 splits 1/3 A, 2/3 C
+    #   → A captures 5+5+10/3 = 40/3, C captures 20/3+1 = 23/3.
+    cand_x = [100, 900, 500]
+    gpd.GeoDataFrame(
+        {"name": ["A", "B", "C"], "required": [0, 0, 0], "attr": [1, 1, 2]},
+        geometry=[Point(x, 5) for x in cand_x], crs=CRS,
+    ).to_file(os.path.join(folder, "candidates_attr.geojson"), driver="GeoJSON")
+    una = fresh_una(folder)
+    una.settings.destinations_file          = "candidates_attr.geojson"
+    una.settings.destination_weight_column  = "attr"
+    una.settings.fa_problem_type = "max_patronage"
+    una.settings.fa_new_facilities = 2
+    una.settings.flow_gravity_cap = 2.0
+    una.RunFacilityAllocation()
+    e = eng(una)
+    assert e.fa_selected.tolist() == [1, 0, 1], f"selected={e.fa_selected}"
+    assert abs(e.summary["total_trips"] - 21.0) < 1e-9, e.summary
+    assert abs(e.fa_access_captured[0] - 40.0 / 3.0) < 1e-9
+    assert abs(e.fa_access_captured[2] - 23.0 / 3.0) < 1e-9
+    print("  max_patronage (cap=2, Huff split, dest weights): PASS")
 
 
 def test_batch(folder):

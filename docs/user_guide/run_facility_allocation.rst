@@ -35,9 +35,11 @@ you already know:
   next to an existing facility scores a low marginal gain because that
   demand is already served.
 
-``destination_weight_column`` is **ignored** by this engine — candidate
-attractiveness enters only through ``fa_attraction_column``, and only
-in the ``max_patronage`` problem type.
+``destination_weight_column`` is ignored by ``max_access`` and
+``min_facilities``. In ``max_patronage`` it supplies facility
+**attractiveness** — the same role destination weights play in
+``RunFlow()``'s Huff model (hypothesized sizes for proposed sites,
+measured sizes for existing ones; unit values when unset).
 
 
 Problem types
@@ -82,9 +84,11 @@ Problem types
        \qquad g_{ij} = A_j \cdot f(d_{ij})
 
     where :math:`A_j` is candidate attractiveness
-    (``fa_attraction_column`` on the candidates layer — hypothesized
-    size for proposed sites, measured size for existing ones; unit
-    values when unset) and cap is ``flow_gravity_cap`` (**numeric
+    (``destination_weight_column`` on the candidates layer —
+    hypothesized size for proposed sites, measured size for existing
+    ones; unit values when unset — exactly the role destination
+    weights play in ``RunFlow()``'s Huff model) and cap is
+    ``flow_gravity_cap`` (**numeric
     required** — derive a percentile value from a ``RunFlow`` or
     accessibility run first). Trips are split among open facilities by
     Huff share, so the per-facility outputs show *patronage including

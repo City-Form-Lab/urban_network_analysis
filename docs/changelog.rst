@@ -24,7 +24,8 @@ This page will track changes in future UNA releases.
   destinations layer. A third problem type, ``max_patronage``,
   maximizes total trips generated under the gravity-cap
   trip-generation model with Huff-split per-facility patronage
-  (candidate attractiveness via ``fa_attraction_column``) — roughly
+  (candidate attractiveness via ``destination_weight_column``, as in
+  ``RunFlow()``'s Huff model) — roughly
   ArcGIS's *Maximize Market Share*. Batch support:
   ``RunBatch("facility_allocation", pairing_file=...)`` with
   composite output on ``fa_access`` / ``fa_covered``.

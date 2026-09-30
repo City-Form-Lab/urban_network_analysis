@@ -41,7 +41,9 @@ Problem types (``settings.fa_problem_type``):
         g_ij = attraction_j · decay(d_ij),  cap = flow_gravity_cap
 
     (numeric cap required). Facility attractiveness comes from
-    ``settings.fa_attraction_column`` (unit values when unset). Trips
+    ``destination_weight_column`` — the same role destination weights
+    play in RunFlow's Huff model (unit values when unset; supply
+    hypothesized sizes for candidate sites). Trips
     are Huff-split across open facilities in the outputs, so
     per-facility patronage shows cannibalization of required
     facilities by newly opened neighbors. Roughly ArcGIS's "Maximize
@@ -146,7 +148,6 @@ class FacilityAllocation(AggregateFlow):
             solver            = solver,
             p_new             = int(s.fa_new_facilities),
             required_column   = (s.fa_required_column or "").strip(),
-            attraction_column = (s.fa_attraction_column or "").strip(),
             gravity_cap       = gravity_cap,
             search_radius     = float(s.search_radius),
             decay_on          = bool(s.flow_decay),
@@ -238,10 +239,32 @@ class FacilityAllocation(AggregateFlow):
             g_indptr, g_nodes, g_dist, ns["search_radius"], first_o
         )
 
-        # 4. Decay-weighted values g_ij. For max_patronage, candidate
-        #    attractiveness multiplies in (g_ij = attraction_j × decay).
+        # 4. Decay-weighted values g_ij. For max_patronage, facility
+        #    attractiveness multiplies in (g_ij = dest_weight_j × decay)
+        #    — destination weights play exactly the role they play in
+        #    RunFlow's Huff model, already loaded via
+        #    destination_weight_column (unit values when unset).
         if ns["problem"] == "max_patronage":
-            attraction = self._read_attraction(settings, ns["attraction_column"])
+            attraction = np.asarray(
+                self.topology.destinations.node_weight, dtype=np.float64
+            )
+            bad = ~np.isfinite(attraction) | (attraction < 0.0)
+            if bad.any():
+                raise ValueError(
+                    f"max_patronage: destination_weight_column has "
+                    f"{int(bad.sum())} NaN/negative value(s) on the "
+                    f"candidates layer (rows "
+                    f"{np.where(bad)[0][:10].tolist()}). Attractiveness "
+                    f"multiplies into every gravity term — fix the "
+                    f"source data."
+                )
+            if np.allclose(attraction, 1.0):
+                self.logger.log(
+                    "FacilityAllocation",
+                    "max_patronage: destination_weight_column not set "
+                    "(or all 1) — every candidate gets unit "
+                    "attractiveness.", v=1,
+                )
             cand_gain = [
                 attraction[j] * self._decay_of(cand_cost[j], ns)
                 for j in range(self._n_destinations)
@@ -415,40 +438,6 @@ class FacilityAllocation(AggregateFlow):
             f"candidates (column '{column}').", v=1,
         )
         return mask
-
-    def _read_attraction(self, settings: Settings, column: str) -> np.ndarray:
-        """Per-candidate attractiveness for max_patronage (hypothesized
-        size for candidates, measured size for existing facilities).
-        Unit values when no column is configured. Re-read from the
-        candidates source file like the required mask."""
-        import os
-        n_dest = self._n_destinations
-        if not column:
-            self.logger.log(
-                "FacilityAllocation",
-                "max_patronage: fa_attraction_column not set — all "
-                "candidates get unit attractiveness.", v=1,
-            )
-            return np.ones(n_dest, dtype=np.float64)
-        source = os.path.join(settings.data_folder, settings.destinations_file)
-        gdf = gpd.read_file(source).reset_index(drop=True)
-        if column not in gdf.columns:
-            raise ValueError(
-                f"fa_attraction_column='{column}' not found in the "
-                f"candidates file {settings.destinations_file}. "
-                f"Available columns: {list(gdf.columns)}."
-            )
-        vals = gdf[column].values.astype(np.float64)
-        bad = ~np.isfinite(vals) | (vals <= 0.0)
-        if bad.any():
-            raise ValueError(
-                f"fa_attraction_column='{column}' has "
-                f"{int(bad.sum())} NaN/non-positive value(s) (rows "
-                f"{np.where(bad)[0][:10].tolist()}). Attractiveness "
-                f"multiplies into every gravity term — fix the source "
-                f"data."
-            )
-        return vals
 
     def _greedy_max_patronage(self, n_orig, cand_demand, cand_gain, w,
                               required, p_new, cap):
