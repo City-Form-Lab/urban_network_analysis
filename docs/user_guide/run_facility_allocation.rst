@@ -27,11 +27,18 @@ cannot be served by any facility and is reported as uncovered.
    ``access_captured`` the Gravity (exponential decay). An evaluation
    run of ``max_patronage`` corresponds to the Rhino **Find
    Patronage** tool's Huff model (Huff 1963; Sevtsuk & Kalvo 2017),
-   with two differences: trip generation here is *elastic* — origins
-   generate trips per the gravity-cap participation model rather than
-   each emitting one trip that is merely split — and attractiveness
-   enters linearly (the Rhino alpha exponent is fixed at 1; apply a
-   power transform to the weight column for other alphas). What is
+   with two differences. First, the trip-generation convention: the
+   Rhino tool either split one inelastic trip per origin
+   (``Decay=Off``) or decayed each destination's trips individually
+   (``Decay=On`` — the convention preserved in the flow engines as
+   ``flow_decay_method="destination_decay"``); ``max_patronage``
+   instead uses the gravity-cap participation model, which is
+   *monotonic* — adding a facility never reduces total trips — a
+   property a siting objective requires (to reproduce Rhino-style
+   patronage numbers for a fixed facility set, use ``RunFlow()`` with
+   ``destination_decay``). Second, attractiveness enters linearly
+   (the Rhino alpha exponent is fixed at 1; apply a power transform
+   to the weight column for other alphas). What is
    new relative to the Rhino toolbox is the optimization layer:
    choosing *which* facilities to open (``fa_new_facilities`` ≥ 1,
    ``min_facilities``, the greedy/exact solvers, and the marginal-gain
