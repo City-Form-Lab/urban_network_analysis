@@ -290,6 +290,12 @@ class FacilityAllocation(AggregateFlow):
         for o in cand_demand:
             coverable[o] = True
         n_unserv = int(n_orig - coverable.sum())
+        # Zero-weight demand never forces coverage: min_facilities must
+        # not open facilities to reach demand points that carry no
+        # weight (e.g. pop = 0 buildings). Without this, the exact
+        # set-cover MILP covers them while the weight-driven greedy
+        # ignores them — inconsistent solvers and inflated counts.
+        coverable &= (w > 0.0)
         if n_unserv > 0:
             w_unserv = float(w[~coverable].sum())
             self.logger.log(
@@ -801,8 +807,12 @@ class FacilityAllocation(AggregateFlow):
 
         remap = np.full(n_orig, -1, dtype=np.int64)
         remap[cov_idx] = np.arange(cov_idx.shape[0])
+        # Keep only pairs whose demand point is coverable — pairs to
+        # excluded demand (zero-weight or unservable) would map to row
+        # index -1 and must not enter the constraint matrix.
+        keep = remap[pair_o] >= 0
         A = sp.csr_matrix(
-            (np.ones(pair_o.shape[0]), (remap[pair_o], pair_j)),
+            (np.ones(int(keep.sum())), (remap[pair_o[keep]], pair_j[keep])),
             shape=(cov_idx.shape[0], n_dest),
         )
         constraints = LinearConstraint(A, 1.0, np.inf)
