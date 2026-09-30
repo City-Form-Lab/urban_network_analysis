@@ -174,6 +174,25 @@ Written to ``output_folder`` per the ``output_*`` format flags:
                       facilities' values reveal cannibalization).
 ===================  ======================================================
 
+.. note::
+
+   **Reading** ``demand_served`` **vs** ``patronage`` (``max_patronage``
+   runs). ``demand_served`` is the facility's *catchment pool*: each
+   demand point's weight, divided among open facilities by Huff share —
+   who the facility draws from, in population terms, before asking
+   whether they travel. ``patronage`` applies each demand point's
+   trip-generation factor ``min(1, G_i/cap)`` to that pool: the
+   *estimated visits actually arriving*. The gap between the two is
+   unrealized demand — a facility with ``demand_served = 1000`` but
+   ``patronage = 400`` has a catchment whose overall accessibility is
+   too weak to activate most trips; where the catchment is saturated
+   (``G ≥ cap`` for everyone) the columns are equal. The ratio
+   ``patronage / demand_served`` is thus a per-facility *activation
+   rate* — low values flag places where an additional nearby facility
+   would unlock further trips. The binary "has any access at all" lives
+   on the demand layer instead (``covered``), and in patronage runs the
+   demand layer's ``access`` column holds the trip-generation factor.
+
 ``<name>_facilities_selected.*`` — the same columns, filtered to only
 the OPEN facilities (required + chosen). Maps the chosen configuration
 directly — no filter step — and is directly usable as a
