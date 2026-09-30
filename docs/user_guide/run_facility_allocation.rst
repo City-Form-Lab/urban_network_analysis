@@ -16,6 +16,27 @@ apply. ``search_radius`` is the **service cutoff** — demand beyond it
 cannot be served by any facility and is reported as uncovered.
 
 
+.. note::
+
+   **For UNA Rhino toolbox users.** This engine descends from two
+   Rhino toolbox tools. An *evaluation run* of ``max_access``
+   (``fa_new_facilities = 0``) corresponds to the Rhino **Closest
+   Facility** tool: each origin is allocated once to its nearest
+   facility within the radius, and the per-facility outputs match —
+   ``demand_served`` is the Reach summarized at the facility,
+   ``access_captured`` the Gravity (exponential decay). An evaluation
+   run of ``max_patronage`` corresponds to the Rhino **Find
+   Patronage** tool's Huff model (Huff 1963; Sevtsuk & Kalvo 2017),
+   with two differences: trip generation here is *elastic* — origins
+   generate trips per the gravity-cap participation model rather than
+   each emitting one trip that is merely split — and attractiveness
+   enters linearly (the Rhino alpha exponent is fixed at 1; apply a
+   power transform to the weight column for other alphas). What is
+   new relative to the Rhino toolbox is the optimization layer:
+   choosing *which* facilities to open (``fa_new_facilities`` ≥ 1,
+   ``min_facilities``, the greedy/exact solvers, and the marginal-gain
+   ranking).
+
 Inputs
 ------
 
