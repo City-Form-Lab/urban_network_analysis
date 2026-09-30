@@ -1011,14 +1011,21 @@ class FacilityAllocation(AggregateFlow):
         file_name = file_name or "facility_allocation"
 
         dest = self.topology.destinations
+        # In max_patronage runs the captured quantity IS estimated trips
+        # (the Huff-split patronage landing at each facility), so the
+        # column is named accordingly; in access/coverage runs it is the
+        # decay-weighted access captured.
+        captured_col = ("patronage"
+                        if getattr(self, "_problem", "") == "max_patronage"
+                        else "access_captured")
         fac = gpd.GeoDataFrame(
             {
-                "uid":             np.asarray(dest.uid),
-                "selected":        self.fa_selected,
-                "required":        self.fa_required,
-                "rank":            self.fa_rank,
-                "demand_served":   self.fa_demand_served,
-                "access_captured": self.fa_access_captured,
+                "uid":           np.asarray(dest.uid),
+                "selected":      self.fa_selected,
+                "required":      self.fa_required,
+                "rank":          self.fa_rank,
+                "demand_served": self.fa_demand_served,
+                captured_col:    self.fa_access_captured,
             },
             geometry=gpd.GeoSeries(dest.geometry).reset_index(drop=True),
             crs=getattr(dest.geometry, "crs", None),

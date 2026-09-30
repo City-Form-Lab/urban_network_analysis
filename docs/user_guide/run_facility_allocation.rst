@@ -165,7 +165,13 @@ Written to ``output_folder`` per the ``output_*`` format flags:
 ``required``          1 = was a pre-existing facility
 ``rank``              0 = required; 1..k = pick order; -1 = not selected
 ``demand_served``     total demand weight assigned to this facility
-``access_captured``   Σ demand weight × decay(distance) assigned here
+                      (Huff-split fractions in ``max_patronage``)
+``access_captured``   Σ demand weight × decay(distance) assigned here.
+                      In ``max_patronage`` runs this column is named
+                      ``patronage`` instead — the estimated trips
+                      landing at each facility (Huff split; sums to the
+                      summary's ``total_trips``, and required
+                      facilities' values reveal cannibalization).
 ===================  ======================================================
 
 ``<name>_facilities_selected.*`` — the same columns, filtered to only

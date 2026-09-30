@@ -321,6 +321,11 @@ def test_max_patronage(folder):
     assert abs(e.fa_access_captured[0] - 15.0) < 1e-9   # A
     assert abs(e.fa_access_captured[2] - 5.5) < 1e-9    # C
     assert e.fa_covered.tolist() == [1, 1, 1, 1, 0, 0]
+    # exported facilities layer carries the trips as a 'patronage' column
+    fac = gpd.read_file(os.path.join(una.settings.output_folder,
+                                     "fa_test_facilities.geojson"))
+    assert "patronage" in fac.columns and "access_captured" not in fac.columns
+    assert abs(fac["patronage"].sum() - 20.5) < 1e-9
 
     # exact solver not available for this mode → logged greedy fallback
     una = fresh_una(folder)
