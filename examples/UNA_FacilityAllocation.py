@@ -24,8 +24,6 @@ Outputs of PART 1 (in OUTPUT_FOLDER):
   <name>_summary.json         objective, solver used, coverage totals
 """
 
-import os
-import geopandas as gpd
 import urban_network_analysis
 
 # --------------------------------------------------------------------------
@@ -88,6 +86,12 @@ una.RunFacilityAllocation()
 # --------------------------------------------------------------------------
 
 if RUN_FLOW_ON_RESULT:
+    # These are only needed for the chaining step: geopandas reads the
+    # facilities output back in to filter the selected sites, os joins
+    # the file paths. Part 1 needs neither.
+    import os
+    import geopandas as gpd
+
     fac = gpd.read_file(os.path.join(OUTPUT_FOLDER, "fa_run_facilities.geojson"))
     chosen = fac[fac["selected"] == 1]
     chosen_file = "chosen_facilities.geojson"
