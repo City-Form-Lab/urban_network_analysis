@@ -373,6 +373,27 @@ def test_max_patronage(folder):
     print("  max_patronage (cap=2, Huff split, dest weights): PASS")
 
 
+def test_evaluation_run(folder):
+    """fa_new_facilities = 0: no siting — evaluate the required
+    configuration as it stands. B required, cap=2, decay off:
+    east cluster (3 × weight 1) reaches only B → factor 0.5 each →
+    total trips 1.5, all landing at B. West cluster uncovered."""
+    una = fresh_una(folder)
+    una.settings.destinations_file = "candidates_Breq.geojson"
+    una.settings.fa_required_column = "required"
+    una.settings.fa_problem_type = "max_patronage"
+    una.settings.fa_new_facilities = 0
+    una.settings.flow_gravity_cap = 2.0
+    una.RunFacilityAllocation()
+    e = eng(una)
+    assert e.fa_selected.tolist() == [0, 1, 0]        # B only, nothing added
+    assert e.fa_rank.tolist() == [-1, 0, -1]
+    assert abs(e.summary["total_trips"] - 1.5) < 1e-9
+    assert abs(e.fa_access_captured[1] - 1.5) < 1e-9  # all patronage at B
+    assert e.fa_covered.tolist() == [0, 0, 0, 1, 1, 1]
+    print("  evaluation run (p=0, required only): PASS")
+
+
 def test_batch(folder):
     """Two-row pairing CSV run via RunBatch('facility_allocation') with
     a composite on fa_access joined onto the shared demand layer."""
@@ -452,6 +473,7 @@ def main():
         test_turns(folder)
         test_unservable(folder)
         test_max_patronage(folder)
+        test_evaluation_run(folder)
         test_batch(folder)
         print("ALL PASS")
 

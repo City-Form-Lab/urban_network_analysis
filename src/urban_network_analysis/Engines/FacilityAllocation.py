@@ -308,6 +308,26 @@ class FacilityAllocation(AggregateFlow):
         #    oversized, unavailable, or fails.
         self._solver_used = ns["solver"]
         self._problem     = ns["problem"]
+        if ns["problem"] != "min_facilities" and ns["p_new"] == 0:
+            # Evaluation run: no siting — allocate demand to the
+            # required facilities as they stand (baseline access /
+            # patronage of the existing configuration).
+            if not required.any():
+                self.logger.log(
+                    "FacilityAllocation",
+                    "WARNING: fa_new_facilities=0 and no required "
+                    "facilities — nothing is open, so every output will "
+                    "be zero/uncovered. Set fa_required_column (to "
+                    "evaluate existing facilities) or fa_new_facilities "
+                    ">= 1 (to site new ones).", v=1,
+                )
+            else:
+                self.logger.log(
+                    "FacilityAllocation",
+                    f"fa_new_facilities=0 — evaluation run: allocating "
+                    f"demand to the {int(required.sum())} required "
+                    f"facilities only (no new siting).", v=1,
+                )
         if ns["problem"] == "min_facilities":
             if ns["solver"] == "exact":
                 selected, rank = self._milp_min_facilities(

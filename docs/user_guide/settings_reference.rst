@@ -1007,8 +1007,11 @@ obstacles) apply exactly as in the other engines;
    :Default: ``1``
 
    How many facilities to ADD beyond the required (pre-existing) ones
-   in ``max_access`` runs. Must be ≥ 1 for that problem type; ignored
-   by ``min_facilities``.
+   in ``max_access`` / ``max_patronage`` runs. ``0`` is a valid
+   **evaluation run**: no siting — demand is allocated to the required
+   facilities as they stand, yielding baseline access or patronage of
+   the existing configuration (the natural "before" for any siting
+   scenario). Ignored by ``min_facilities``.
 
 .. py:data:: fa_required_column
 

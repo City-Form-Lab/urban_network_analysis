@@ -102,6 +102,16 @@ Problem types
     it is submodular, so greedy keeps its guarantee).
 
 
+.. tip::
+
+   Setting ``fa_new_facilities = 0`` (with ``fa_required_column`` set)
+   turns either max mode into a pure **evaluation run**: no siting —
+   demand is allocated to the existing facilities as they stand. In
+   ``max_patronage`` this computes baseline patronage of the current
+   configuration, the natural "before" to compare any siting scenario
+   against.
+
+
 Solvers
 -------
 

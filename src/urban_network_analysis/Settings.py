@@ -624,11 +624,15 @@ class Settings:
 
         # Facility allocation (fa_problem_type / fa_solver Literals are
         # validated by the generic Literal check above).
-        if int(self.fa_new_facilities) < 1 \
+        # fa_new_facilities = 0 is a valid EVALUATION run: no siting,
+        # allocation computed for the required facilities alone
+        # (baseline access / patronage of the existing configuration).
+        if int(self.fa_new_facilities) < 0 \
                 and self.fa_problem_type in ("max_access", "max_patronage"):
             errors.append(
-                f"fa_new_facilities must be >= 1 for "
-                f"fa_problem_type='{self.fa_problem_type}'; "
+                f"fa_new_facilities must be >= 0 for "
+                f"fa_problem_type='{self.fa_problem_type}' "
+                f"(0 = evaluate the required facilities only); "
                 f"got {self.fa_new_facilities}."
             )
 
