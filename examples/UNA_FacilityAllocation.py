@@ -39,9 +39,21 @@ REQUIRED_COL  = "existing"                      # truthy = already-open facility
 OUTPUT_FOLDER = r"/path/to/your/data/Results"
 
 CUTOFF         = 800            # service cutoff (network units)
-PROBLEM        = "max_access"   # or "min_facilities"
+
+# Problem type — three options:
+#   "max_access"     maximize demand-weighted access to the nearest open
+#                    facility with NEW_FACILITIES new sites
+#   "min_facilities" fewest facilities covering all coverable demand
+#                    (NEW_FACILITIES ignored — the count is the output)
+#   "max_patronage"  maximize total trips generated (gravity-cap model,
+#                    Huff-split patronage). Extra requirements below:
+#                    a NUMERIC flow_gravity_cap, and optionally
+#                    destination_weight_column on the candidates layer
+#                    as facility attractiveness (sizes).
+PROBLEM        = "max_access"
 NEW_FACILITIES = 2              # ignored by min_facilities
-SOLVER         = "greedy"       # or "exact" (MILP; falls back to greedy if oversized)
+SOLVER         = "greedy"       # or "exact" (MILP; falls back to greedy if
+                                # oversized; max_patronage always greedy)
 
 RUN_FLOW_ON_RESULT = False      # PART 2 on/off
 
@@ -69,6 +81,13 @@ s.fa_solver            = SOLVER
 s.flow_decay           = True
 s.flow_decay_curve     = "exponential"
 s.gravity_beta         = 0.002
+
+# max_patronage only — uncomment and set:
+# s.flow_gravity_cap          = 3.5     # NUMERIC saturation cap (derive from
+#                                       # an accessibility/flow run, e.g. p95)
+# s.destination_weight_column = "size"  # facility attractiveness column on
+#                                       # the candidates layer (optional;
+#                                       # unit values when unset)
 
 # Impedance — everything the other engines support applies here too.
 s.elevation            = False   # True with a 3D network
