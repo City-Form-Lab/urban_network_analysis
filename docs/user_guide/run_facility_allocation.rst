@@ -102,6 +102,27 @@ Problem types
     it is submodular, so greedy keeps its guarantee).
 
 
+.. note::
+
+   **How demand is allocated — the key behavioral difference.**
+   ``max_access`` (and ``min_facilities``) use *all-or-nothing nearest
+   assignment*: each demand point gives its entire weight to the single
+   open facility with the best decay value — effectively the nearest by
+   network impedance, since destination weights are ignored in these
+   modes — and exactly zero to every other facility, even one a few
+   meters farther. A facility that is second-nearest to everyone
+   captures nothing. ``max_patronage`` instead allocates each demand
+   point *fractionally* across all open facilities in reach, by Huff
+   shares proportional to attractiveness × decay — so a larger
+   facility slightly farther away receives a larger share and can even
+   be a demand point's primary destination. Neither mode ever
+   double-counts: in both, the per-facility columns partition the
+   demand, and their sums equal the run totals. Choose by how users of
+   the facility type behave: strictly-nearest services (elementary
+   schools, polling places) → ``max_access``; destinations people
+   split their visits among, where size matters (libraries, retail,
+   parks) → ``max_patronage``.
+
 .. tip::
 
    The default ``fa_new_facilities = 0`` (with
