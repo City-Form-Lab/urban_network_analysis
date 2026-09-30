@@ -17,7 +17,7 @@ workflow has two parts:
           generate — siting and footfall from one impedance model.
 
 Outputs of PART 1 (in OUTPUT_FOLDER):
-  <name>_facilities.geojson   candidates + selected/required/rank/
+  <name>_facilities.geojson   candidates + selected/existing/rank/
                               demand_served/access_captured columns
   <name>_demand.geojson       demand + assigned_facility/distance/
                               access/covered columns
@@ -35,7 +35,7 @@ NETWORK       = "network.geojson"
 DEMAND        = "building_centroids.geojson"    # origins = demand points
 DEMAND_WEIGHT = "pop2020"                       # demand weight column
 CANDIDATES    = "candidate_sites.geojson"       # destinations = candidate facilities
-REQUIRED_COL  = "existing"                      # truthy = already-open facility; None if none
+EXISTING_COL  = "existing"                      # truthy = already-open facility; None if none
 OUTPUT_FOLDER = r"/path/to/your/data/Results"
 
 CUTOFF         = 800            # service cutoff (network units)
@@ -69,7 +69,7 @@ s.network_file         = NETWORK
 s.origins_file         = DEMAND
 s.origin_weight_column = DEMAND_WEIGHT
 s.destinations_file    = CANDIDATES
-s.fa_required_column   = REQUIRED_COL
+s.fa_existing_facilities_column   = EXISTING_COL
 
 s.search_radius        = CUTOFF
 s.fa_problem_type      = PROBLEM

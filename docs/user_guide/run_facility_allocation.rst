@@ -29,7 +29,7 @@ you already know:
 - **Candidates = the destinations layer.** ``destinations_file``, one
   point per potential site.
 - **Existing facilities = a column on the candidates layer**, named by
-  ``fa_required_column``. Truthy values (1 / TRUE / yes) mark
+  ``fa_existing_facilities_column``. Truthy values (1 / TRUE / yes) mark
   facilities that are already in operation — they are always kept open
   and the optimizer sites new facilities *around* them: a candidate
   next to an existing facility scores a low marginal gain because that
@@ -104,8 +104,9 @@ Problem types
 
 .. tip::
 
-   Setting ``fa_new_facilities = 0`` (with ``fa_required_column`` set)
-   turns either max mode into a pure **evaluation run**: no siting —
+   The default ``fa_new_facilities = 0`` (with
+   ``fa_existing_facilities_column`` set) makes either max mode a pure
+   **evaluation run**: no siting —
    demand is allocated to the existing facilities as they stand. In
    ``max_patronage`` this computes baseline patronage of the current
    configuration, the natural "before" to compare any siting scenario
@@ -148,7 +149,7 @@ Example
    s.origins_file         = "building_centroids.geojson"   # demand
    s.origin_weight_column = "pop2020"
    s.destinations_file    = "library_sites.geojson"        # candidates
-   s.fa_required_column   = "existing"                     # column marking open libraries
+   s.fa_existing_facilities_column   = "existing"                     # column marking open libraries
 
    s.search_radius        = 800          # service cutoff
    s.elevation            = True
@@ -172,15 +173,15 @@ Written to ``output_folder`` per the ``output_*`` format flags:
 
 ===================  ======================================================
 ``selected``          1 = open in the chosen configuration
-``required``          1 = was a pre-existing facility
-``rank``              0 = required; 1..k = pick order; -1 = not selected
+``existing``          1 = was a pre-existing facility
+``rank``              0 = existing; 1..k = pick order; -1 = not selected
 ``demand_served``     total demand weight assigned to this facility
                       (Huff-split fractions in ``max_patronage``)
 ``access_captured``   Σ demand weight × decay(distance) assigned here.
                       In ``max_patronage`` runs this column is named
                       ``patronage`` instead — the estimated trips
                       landing at each facility (Huff split; sums to the
-                      summary's ``total_trips``, and required
+                      summary's ``total_trips``, and existing
                       facilities' values reveal cannibalization).
 ===================  ======================================================
 
@@ -204,7 +205,7 @@ Written to ``output_folder`` per the ``output_*`` format flags:
    demand layer's ``access`` column holds the trip-generation factor.
 
 ``<name>_facilities_selected.*`` — the same columns, filtered to only
-the OPEN facilities (required + chosen). Maps the chosen configuration
+the OPEN facilities (existing + chosen). Maps the chosen configuration
 directly — no filter step — and is directly usable as a
 ``destinations_file`` for a follow-up ``RunFlow()``. The full
 ``_facilities`` table remains the analytic record, including the

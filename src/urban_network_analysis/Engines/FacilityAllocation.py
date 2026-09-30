@@ -3,7 +3,7 @@
 UNA's take on what ESRI and the OR literature call location-allocation.
 Demand points (origins layer) are served by facilities chosen from a
 candidate layer (destinations layer); facilities already in operation
-are marked by a truthy value in ``settings.fa_required_column`` and are
+are marked by a truthy value in ``settings.fa_existing_facilities_column`` and are
 always kept open. Travel is always evaluated TOWARDS the facility, and
 ``search_radius`` is the service cutoff: demand beyond it attends
 nothing and counts as uncovered.
@@ -45,7 +45,7 @@ Problem types (``settings.fa_problem_type``):
     play in RunFlow's Huff model (unit values when unset; supply
     hypothesized sizes for candidate sites). Trips
     are Huff-split across open facilities in the outputs, so
-    per-facility patronage shows cannibalization of required
+    per-facility patronage shows cannibalization of existing
     facilities by newly opened neighbors. Roughly ArcGIS's "Maximize
     Market Share". Greedy solver only.
 
@@ -70,7 +70,7 @@ entries. No AggregateFlow code is modified, and no flow is computed.
 
 The selection stage is a greedy marginal-gain solver (submodular
 objective → (1 − 1/e) near-optimality guarantee), deterministic, with
-required facilities pre-seeded.
+existing facilities pre-seeded.
 """
 
 from __future__ import annotations
@@ -99,9 +99,9 @@ class FacilityAllocation(AggregateFlow):
     fa_covered:           np.ndarray = None   # 1/0
 
     # Per-candidate (destination) arrays — exported joined on candidates.
-    fa_selected:          np.ndarray = None   # 1 = open (required or chosen)
-    fa_required:          np.ndarray = None   # 1 = pre-existing facility
-    fa_rank:              np.ndarray = None   # greedy pick order (1..p); 0 = required; -1 = not selected
+    fa_selected:          np.ndarray = None   # 1 = open (existing or chosen)
+    fa_existing:          np.ndarray = None   # 1 = pre-existing facility
+    fa_rank:              np.ndarray = None   # greedy pick order (1..p); 0 = existing; -1 = not selected
     fa_demand_served:     np.ndarray = None   # Σ w_i of demand assigned here
     fa_access_captured:   np.ndarray = None   # Σ w_i · decay(d_ij) of demand assigned here
 
@@ -147,7 +147,7 @@ class FacilityAllocation(AggregateFlow):
             problem           = problem,
             solver            = solver,
             p_new             = int(s.fa_new_facilities),
-            required_column   = (s.fa_required_column or "").strip(),
+            existing_column   = (s.fa_existing_facilities_column or "").strip(),
             gravity_cap       = gravity_cap,
             search_radius     = float(s.search_radius),
             decay_on          = bool(s.flow_decay),
@@ -274,8 +274,8 @@ class FacilityAllocation(AggregateFlow):
                 self._decay_of(cost, ns) for cost in cand_cost
             ]
 
-        # 5. Required facilities.
-        required = self._read_required_mask(settings, ns["required_column"])
+        # 5. Existing facilities.
+        existing = self._read_existing_mask(settings, ns["existing_column"])
 
         # 6. Demand weights.
         origins = self.topology.origins
@@ -310,14 +310,14 @@ class FacilityAllocation(AggregateFlow):
         self._problem     = ns["problem"]
         if ns["problem"] != "min_facilities" and ns["p_new"] == 0:
             # Evaluation run: no siting — allocate demand to the
-            # required facilities as they stand (baseline access /
+            # existing facilities as they stand (baseline access /
             # patronage of the existing configuration).
-            if not required.any():
+            if not existing.any():
                 self.logger.log(
                     "FacilityAllocation",
-                    "WARNING: fa_new_facilities=0 and no required "
+                    "WARNING: fa_new_facilities=0 and no existing "
                     "facilities — nothing is open, so every output will "
-                    "be zero/uncovered. Set fa_required_column (to "
+                    "be zero/uncovered. Set fa_existing_facilities_column (to "
                     "evaluate existing facilities) or fa_new_facilities "
                     ">= 1 (to site new ones).", v=1,
                 )
@@ -325,43 +325,43 @@ class FacilityAllocation(AggregateFlow):
                 self.logger.log(
                     "FacilityAllocation",
                     f"fa_new_facilities=0 — evaluation run: allocating "
-                    f"demand to the {int(required.sum())} required "
+                    f"demand to the {int(existing.sum())} existing "
                     f"facilities only (no new siting).", v=1,
                 )
         if ns["problem"] == "min_facilities":
             if ns["solver"] == "exact":
                 selected, rank = self._milp_min_facilities(
-                    n_orig, cand_demand, w, required, coverable
+                    n_orig, cand_demand, w, existing, coverable
                 )
             else:
                 selected, rank = self._greedy_min_facilities(
-                    n_orig, cand_demand, w, required, coverable
+                    n_orig, cand_demand, w, existing, coverable
                 )
         elif ns["problem"] == "max_patronage":
             selected, rank = self._greedy_max_patronage(
-                n_orig, cand_demand, cand_gain, w, required,
+                n_orig, cand_demand, cand_gain, w, existing,
                 ns["p_new"], ns["gravity_cap"],
             )
         else:  # max_access
             if ns["solver"] == "exact":
                 selected, rank = self._milp_max_access(
-                    n_orig, cand_demand, cand_gain, w, required, ns["p_new"]
+                    n_orig, cand_demand, cand_gain, w, existing, ns["p_new"]
                 )
             else:
                 selected, rank = self._greedy_max_access(
-                    n_orig, cand_demand, cand_gain, w, required, ns["p_new"]
+                    n_orig, cand_demand, cand_gain, w, existing, ns["p_new"]
                 )
 
         # 8. Allocation of demand to the chosen configuration + outputs.
         if ns["problem"] == "max_patronage":
             self._allocate_patronage(
                 n_orig, cand_demand, cand_cost, cand_gain, w, selected,
-                rank, required, ns["gravity_cap"],
+                rank, existing, ns["gravity_cap"],
             )
         else:
             self._allocate(
                 n_orig, cand_demand, cand_cost, cand_gain, w, selected,
-                rank, required,
+                rank, existing,
             )
         self.has_flow_results = False   # this engine produces no edge flow
 
@@ -419,11 +419,11 @@ class FacilityAllocation(AggregateFlow):
             ns["decay_curve"], ns["gravity_beta"],
         )
 
-    def _read_required_mask(self, settings: Settings, column: str) -> np.ndarray:
-        """Boolean mask of required (pre-existing) candidates.
+    def _read_existing_mask(self, settings: Settings, column: str) -> np.ndarray:
+        """Boolean mask of existing (pre-existing) candidates.
 
         The AccessPoints object keeps only geometry/weights/uid, so the
-        required flag is re-read from the candidates source file; row
+        existing flag is re-read from the candidates source file; row
         order is preserved (BuildAccessPoints does reset_index on the
         same file).
         """
@@ -435,13 +435,13 @@ class FacilityAllocation(AggregateFlow):
         gdf = gpd.read_file(source).reset_index(drop=True)
         if column not in gdf.columns:
             raise ValueError(
-                f"fa_required_column='{column}' not found in the "
+                f"fa_existing_facilities_column='{column}' not found in the "
                 f"candidates file {settings.destinations_file}. "
                 f"Available columns: {list(gdf.columns)}."
             )
         if len(gdf) != n_dest:
             raise ValueError(
-                f"Candidates file re-read for fa_required_column returned "
+                f"Candidates file re-read for fa_existing_facilities_column returned "
                 f"{len(gdf)} rows but topology holds {n_dest} candidates — "
                 f"the file changed on disk mid-run."
             )
@@ -454,13 +454,13 @@ class FacilityAllocation(AggregateFlow):
             mask[i] = s not in ("", "0", "0.0", "false", "no", "none")
         self.logger.log(
             "FacilityAllocation",
-            f"Required facilities: {int(mask.sum())} of {n_dest} "
+            f"Existing facilities: {int(mask.sum())} of {n_dest} "
             f"candidates (column '{column}').", v=1,
         )
         return mask
 
     def _greedy_max_patronage(self, n_orig, cand_demand, cand_gain, w,
-                              required, p_new, cap):
+                              existing, p_new, cap):
         """Greedy maximization of total trips generated:
 
             objective = Σ_i w_i · min(1, G_i / cap),
@@ -473,12 +473,12 @@ class FacilityAllocation(AggregateFlow):
         break on the lower candidate index.
         """
         n_dest   = self._n_destinations
-        selected = required.copy()
+        selected = existing.copy()
         rank     = np.full(n_dest, -1, dtype=np.int64)
-        rank[required] = 0
+        rank[existing] = 0
 
         G = np.zeros(n_orig, dtype=np.float64)      # Σ g over open set
-        for j in np.where(required)[0]:
+        for j in np.where(existing)[0]:
             np.add.at(G, cand_demand[j], cand_gain[j])
 
         def obj(G_arr):
@@ -487,7 +487,7 @@ class FacilityAllocation(AggregateFlow):
         base = obj(G)
         self.logger.log(
             "FacilityAllocation",
-            f"Baseline trips (required facilities only, cap={cap:g}): "
+            f"Baseline trips (existing facilities only, cap={cap:g}): "
             f"{base:,.2f}.", v=1,
         )
 
@@ -525,7 +525,7 @@ class FacilityAllocation(AggregateFlow):
         return selected, rank
 
     def _greedy_max_access(self, n_orig, cand_demand, cand_gain, w,
-                           required, p_new):
+                           existing, p_new):
         """Greedy submodular maximization of Σ_i w_i · best_g[i].
 
         best_g[i] tracks the access value demand i gets from the
@@ -534,19 +534,19 @@ class FacilityAllocation(AggregateFlow):
         Deterministic: ties break on the lower candidate index.
         """
         n_dest   = self._n_destinations
-        selected = required.copy()
+        selected = existing.copy()
         rank     = np.full(n_dest, -1, dtype=np.int64)
-        rank[required] = 0
+        rank[existing] = 0
 
         best_g = np.zeros(n_orig, dtype=np.float64)
-        for j in np.where(required)[0]:
+        for j in np.where(existing)[0]:
             o, g = cand_demand[j], cand_gain[j]
             np.maximum.at(best_g, o, g)
 
         base_obj = float((w * best_g).sum())
         self.logger.log(
             "FacilityAllocation",
-            f"Baseline objective (required facilities only): "
+            f"Baseline objective (existing facilities only): "
             f"{base_obj:,.2f}.", v=1,
         )
 
@@ -582,23 +582,23 @@ class FacilityAllocation(AggregateFlow):
             )
         return selected, rank
 
-    def _greedy_min_facilities(self, n_orig, cand_demand, w, required,
+    def _greedy_min_facilities(self, n_orig, cand_demand, w, existing,
                                coverable):
         """Weighted set-cover greedy: open the fewest facilities that
         cover every coverable demand point within the cutoff.
 
-        Starts from the required set; each round opens the candidate
+        Starts from the existing set; each round opens the candidate
         covering the largest still-uncovered demand weight (ties break
         on the lower candidate index) until nothing coverable remains
         uncovered. fa_new_facilities is ignored by design.
         """
         n_dest   = self._n_destinations
-        selected = required.copy()
+        selected = existing.copy()
         rank     = np.full(n_dest, -1, dtype=np.int64)
-        rank[required] = 0
+        rank[existing] = 0
 
         covered = np.zeros(n_orig, dtype=bool)
-        for j in np.where(required)[0]:
+        for j in np.where(existing)[0]:
             covered[cand_demand[j]] = True
 
         target = coverable & ~covered
@@ -630,7 +630,7 @@ class FacilityAllocation(AggregateFlow):
         self.logger.log(
             "FacilityAllocation",
             f"min_facilities (greedy): full coverage of coverable demand "
-            f"with {step} new + {int(required.sum())} required facilities.",
+            f"with {step} new + {int(existing.sum())} existing facilities.",
             v=1,
         )
         return selected, rank
@@ -654,7 +654,7 @@ class FacilityAllocation(AggregateFlow):
         return greedy_fn(*args)
 
     def _milp_max_access(self, n_orig, cand_demand, cand_gain, w,
-                         required, p_new):
+                         existing, p_new):
         """Exact p-median-with-decay MILP.
 
         Variables: y_j ∈ {0,1} (open), x_p ∈ [0,1] (assignment fraction
@@ -662,8 +662,8 @@ class FacilityAllocation(AggregateFlow):
             maximize   Σ_p w_i(p)·g_p·x_p
             s.t.       Σ_{p∈i} x_p ≤ 1          (each demand once)
                        x_p ≤ y_j(p)             (only open facilities)
-                       Σ_{j∉required} y_j ≤ p_new
-                       y_j = 1  ∀ j required
+                       Σ_{j∉existing} y_j ≤ p_new
+                       y_j = 1  ∀ j existing
         """
         try:
             from scipy.optimize import milp, LinearConstraint, Bounds
@@ -672,7 +672,7 @@ class FacilityAllocation(AggregateFlow):
             return self._milp_fallback(
                 "scipy.optimize.milp unavailable (needs scipy >= 1.9).",
                 self._greedy_max_access,
-                n_orig, cand_demand, cand_gain, w, required, p_new,
+                n_orig, cand_demand, cand_gain, w, existing, p_new,
             )
 
         n_dest  = self._n_destinations
@@ -687,7 +687,7 @@ class FacilityAllocation(AggregateFlow):
             return self._milp_fallback(
                 "no demand-candidate pairs within the cutoff.",
                 self._greedy_max_access,
-                n_orig, cand_demand, cand_gain, w, required, p_new,
+                n_orig, cand_demand, cand_gain, w, existing, p_new,
             )
         if n_pairs > self._MILP_MAX_PAIRS:
             return self._milp_fallback(
@@ -695,7 +695,7 @@ class FacilityAllocation(AggregateFlow):
                 f"guard ({self._MILP_MAX_PAIRS:,}); greedy is near-optimal "
                 f"((1-1/e) guarantee) at this scale.",
                 self._greedy_max_access,
-                n_orig, cand_demand, cand_gain, w, required, p_new,
+                n_orig, cand_demand, cand_gain, w, existing, p_new,
             )
 
         n_var = n_dest + n_pairs                      # [y | x]
@@ -719,9 +719,9 @@ class FacilityAllocation(AggregateFlow):
             ),
             shape=(n_pairs, n_var),
         )
-        # (3) Σ_{j∉required} y_j ≤ p_new.
+        # (3) Σ_{j∉existing} y_j ≤ p_new.
         row3 = np.zeros((1, n_var))
-        row3[0, :n_dest] = (~required).astype(np.float64)
+        row3[0, :n_dest] = (~existing).astype(np.float64)
         A3 = sp.csr_matrix(row3)
 
         A  = sp.vstack([A1, A2, A3], format="csr")
@@ -732,7 +732,7 @@ class FacilityAllocation(AggregateFlow):
 
         lb = np.zeros(n_var)
         hb = np.ones(n_var)
-        lb[:n_dest][required] = 1.0                   # required forced open
+        lb[:n_dest][existing] = 1.0                   # existing forced open
         integrality = np.zeros(n_var)
         integrality[:n_dest] = 1                      # y binary, x continuous
 
@@ -746,29 +746,29 @@ class FacilityAllocation(AggregateFlow):
                 f"MILP did not reach optimality (status={res.status}: "
                 f"{res.message}).",
                 self._greedy_max_access,
-                n_orig, cand_demand, cand_gain, w, required, p_new,
+                n_orig, cand_demand, cand_gain, w, existing, p_new,
             )
 
         selected = res.x[:n_dest] > 0.5
-        selected |= required
+        selected |= existing
         self.logger.log(
             "FacilityAllocation",
             f"max_access (exact MILP): objective {-res.fun:,.2f} with "
-            f"{int(selected.sum() - required.sum())} new + "
-            f"{int(required.sum())} required facilities "
+            f"{int(selected.sum() - existing.sum())} new + "
+            f"{int(existing.sum())} existing facilities "
             f"({n_pairs:,} pairs, {n_var:,} variables).", v=1,
         )
-        rank = self._rank_selection(selected, required, cand_demand,
+        rank = self._rank_selection(selected, existing, cand_demand,
                                     cand_gain, w)
         return selected, rank
 
-    def _milp_min_facilities(self, n_orig, cand_demand, w, required,
+    def _milp_min_facilities(self, n_orig, cand_demand, w, existing,
                              coverable):
         """Exact set-cover MILP: minimize the number of NEW facilities
         subject to every coverable demand point being covered.
-            minimize   Σ_{j∉required} y_j
+            minimize   Σ_{j∉existing} y_j
             s.t.       Σ_{j covers i} y_j ≥ 1   ∀ coverable i
-                       y_j = 1  ∀ j required
+                       y_j = 1  ∀ j existing
         """
         try:
             from scipy.optimize import milp, LinearConstraint, Bounds
@@ -777,7 +777,7 @@ class FacilityAllocation(AggregateFlow):
             return self._milp_fallback(
                 "scipy.optimize.milp unavailable (needs scipy >= 1.9).",
                 self._greedy_min_facilities,
-                n_orig, cand_demand, w, required, coverable,
+                n_orig, cand_demand, w, existing, coverable,
             )
 
         n_dest = self._n_destinations
@@ -795,9 +795,9 @@ class FacilityAllocation(AggregateFlow):
                 v=1,
             )
             rank = np.full(n_dest, -1, dtype=np.int64)
-            rank[required] = 0
+            rank[existing] = 0
             self._solver_used = "exact"
-            return required.copy(), rank
+            return existing.copy(), rank
 
         remap = np.full(n_orig, -1, dtype=np.int64)
         remap[cov_idx] = np.arange(cov_idx.shape[0])
@@ -807,9 +807,9 @@ class FacilityAllocation(AggregateFlow):
         )
         constraints = LinearConstraint(A, 1.0, np.inf)
 
-        c = (~required).astype(np.float64)            # count new only
+        c = (~existing).astype(np.float64)            # count new only
         lb = np.zeros(n_dest)
-        lb[required] = 1.0
+        lb[existing] = 1.0
         res = milp(
             c=c, constraints=constraints,
             bounds=Bounds(lb, np.ones(n_dest)),
@@ -821,37 +821,37 @@ class FacilityAllocation(AggregateFlow):
                 f"MILP did not reach optimality (status={res.status}: "
                 f"{res.message}).",
                 self._greedy_min_facilities,
-                n_orig, cand_demand, w, required, coverable,
+                n_orig, cand_demand, w, existing, coverable,
             )
 
         selected = res.x > 0.5
-        selected |= required
+        selected |= existing
         self.logger.log(
             "FacilityAllocation",
             f"min_facilities (exact MILP): full coverage with "
-            f"{int(round(res.fun))} new + {int(required.sum())} required "
+            f"{int(round(res.fun))} new + {int(existing.sum())} existing "
             f"facilities.", v=1,
         )
         # Rank the chosen new facilities by coverage contribution
         # (greedy order restricted to the optimal set).
         gain_unit = [np.ones_like(cand_demand[j], dtype=np.float64)
                      for j in range(n_dest)]
-        rank = self._rank_selection(selected, required, cand_demand,
+        rank = self._rank_selection(selected, existing, cand_demand,
                                     gain_unit, w)
         return selected, rank
 
-    def _rank_selection(self, selected, required, cand_demand, cand_gain, w):
+    def _rank_selection(self, selected, existing, cand_demand, cand_gain, w):
         """Order an already-chosen facility set for the fa_rank output:
         greedy marginal-gain ordering restricted to the selected set
-        (required = 0, then 1..k by contribution). Deterministic."""
+        (existing = 0, then 1..k by contribution). Deterministic."""
         n_dest = self._n_destinations
         rank = np.full(n_dest, -1, dtype=np.int64)
-        rank[required] = 0
+        rank[existing] = 0
         n_orig = int(len(self.topology.origins.node_weight))
         best_g = np.zeros(n_orig, dtype=np.float64)
-        for j in np.where(required)[0]:
+        for j in np.where(existing)[0]:
             np.maximum.at(best_g, cand_demand[j], cand_gain[j])
-        remaining = list(np.where(selected & ~required)[0])
+        remaining = list(np.where(selected & ~existing)[0])
         step = 0
         while remaining:
             best_j, best_gain = remaining[0], -1.0
@@ -868,7 +868,7 @@ class FacilityAllocation(AggregateFlow):
         return rank
 
     def _allocate(self, n_orig, cand_demand, cand_cost, cand_gain, w,
-                  selected, rank, required):
+                  selected, rank, existing):
         """Assign each demand point to its best open facility; fill all
         fa_* result arrays and the summary dict."""
         n_dest = self._n_destinations
@@ -901,7 +901,7 @@ class FacilityAllocation(AggregateFlow):
         )
 
         self.fa_selected        = selected.astype(np.int64)
-        self.fa_required        = required.astype(np.int64)
+        self.fa_existing        = existing.astype(np.int64)
         self.fa_rank            = rank
         self.fa_demand_served   = np.zeros(n_dest, dtype=np.float64)
         self.fa_access_captured = np.zeros(n_dest, dtype=np.float64)
@@ -916,8 +916,8 @@ class FacilityAllocation(AggregateFlow):
             "solver":                 getattr(self, "_solver_used", "greedy"),
             "objective_total_access": float((w * best_g).sum()),
             "n_selected":             int(selected.sum()),
-            "n_required":             int(required.sum()),
-            "n_new":                  int(selected.sum() - required.sum()),
+            "n_existing":             int(existing.sum()),
+            "n_new":                  int(selected.sum() - existing.sum()),
             "demand_total":           total_w,
             "demand_covered":         cov_w,
             "demand_uncovered":       total_w - cov_w,
@@ -926,20 +926,20 @@ class FacilityAllocation(AggregateFlow):
         self.logger.log(
             "FacilityAllocation",
             f"Allocation done: objective={self.summary['objective_total_access']:,.2f}, "
-            f"{self.summary['n_new']} new + {self.summary['n_required']} required "
+            f"{self.summary['n_new']} new + {self.summary['n_existing']} existing "
             f"facilities open, demand covered "
             f"{cov_w:,.1f}/{total_w:,.1f} ({self.summary['pct_covered']:.1f}%).",
             v=1,
         )
 
     def _allocate_patronage(self, n_orig, cand_demand, cand_cost,
-                            cand_gain, w, selected, rank, required, cap):
+                            cand_gain, w, selected, rank, existing, cap):
         """Fill the fa_* arrays for max_patronage.
 
         Per-demand: trips_i = w_i · min(1, G_i/cap); trips split among
         open facilities by Huff share g_ij / G_i. Per-facility
         ``demand_served`` and ``access_captured`` hold the Huff-split
-        demand weight and trips respectively — so required facilities'
+        demand weight and trips respectively — so existing facilities'
         numbers show cannibalization by newly opened neighbors.
         ``assigned_facility``/``distance`` report each demand point's
         LARGEST-share open facility (its primary destination).
@@ -980,7 +980,7 @@ class FacilityAllocation(AggregateFlow):
 
         # Huff split of demand weight and trips across open facilities.
         self.fa_selected        = selected.astype(np.int64)
-        self.fa_required        = required.astype(np.int64)
+        self.fa_existing        = existing.astype(np.int64)
         self.fa_rank            = rank
         self.fa_demand_served   = np.zeros(n_dest, dtype=np.float64)
         self.fa_access_captured = np.zeros(n_dest, dtype=np.float64)
@@ -1001,8 +1001,8 @@ class FacilityAllocation(AggregateFlow):
             "total_trips":            total_tr,
             "gravity_cap":            float(cap),
             "n_selected":             int(selected.sum()),
-            "n_required":             int(required.sum()),
-            "n_new":                  int(selected.sum() - required.sum()),
+            "n_existing":             int(existing.sum()),
+            "n_new":                  int(selected.sum() - existing.sum()),
             "demand_total":           total_w,
             "demand_covered":         cov_w,
             "demand_uncovered":       total_w - cov_w,
@@ -1012,7 +1012,7 @@ class FacilityAllocation(AggregateFlow):
             "FacilityAllocation",
             f"Allocation done (max_patronage): total trips "
             f"{total_tr:,.2f}, {self.summary['n_new']} new + "
-            f"{self.summary['n_required']} required facilities open, "
+            f"{self.summary['n_existing']} existing facilities open, "
             f"demand covered {cov_w:,.1f}/{total_w:,.1f} "
             f"({self.summary['pct_covered']:.1f}%).",
             v=1,
@@ -1042,7 +1042,7 @@ class FacilityAllocation(AggregateFlow):
             {
                 "uid":           np.asarray(dest.uid),
                 "selected":      self.fa_selected,
-                "required":      self.fa_required,
+                "existing":      self.fa_existing,
                 "rank":          self.fa_rank,
                 "demand_served": self.fa_demand_served,
                 captured_col:    self.fa_access_captured,
@@ -1055,7 +1055,7 @@ class FacilityAllocation(AggregateFlow):
             self.logger, "FacilityAllocation", desc="facilities",
         )
 
-        # Convenience layer: only the OPEN facilities (required +
+        # Convenience layer: only the OPEN facilities (existing +
         # chosen), same columns — maps the chosen configuration without
         # a filter step, and is directly usable as a destinations_file
         # for a follow-up RunFlow(). The full candidates table above

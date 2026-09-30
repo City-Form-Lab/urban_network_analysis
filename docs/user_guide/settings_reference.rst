@@ -199,7 +199,7 @@ Origins, destinations, and weights
    :Default: ``None``
 
    Column in ``origins_file`` used as a unique identifier for each origin
-   point. Required for ``RunODM()`` (which reports pairwise distances by
+   point. Existing for ``RunODM()`` (which reports pairwise distances by
    origin/destination ID). Optional otherwise, but recommended so output
    files can be joined back to your source data.
 
@@ -1004,23 +1004,23 @@ obstacles) apply exactly as in the other engines;
 .. py:data:: fa_new_facilities
 
    :Type: ``int``
-   :Default: ``1``
+   :Default: ``0``
 
-   How many facilities to ADD beyond the required (pre-existing) ones
-   in ``max_access`` / ``max_patronage`` runs. ``0`` is a valid
-   **evaluation run**: no siting — demand is allocated to the required
+   How many facilities to ADD beyond the existing (pre-existing) ones
+   in ``max_access`` / ``max_patronage`` runs. The default ``0`` is an
+   **evaluation run**: no siting — demand is allocated to the existing
    facilities as they stand, yielding baseline access or patronage of
    the existing configuration (the natural "before" for any siting
    scenario). Ignored by ``min_facilities``.
 
-.. py:data:: fa_required_column
+.. py:data:: fa_existing_facilities_column
 
    :Type: ``str | None``
    :Default: ``None``
 
    Name of a column on the CANDIDATES (destinations) layer whose
    truthy values (1 / TRUE / yes) mark facilities that already exist.
-   Required facilities are always kept open: they anchor the baseline
+   Existing facilities are always kept open: they anchor the baseline
    and the optimizer sites new facilities around them. Leave ``None``
    for a greenfield run with no existing facilities.
 

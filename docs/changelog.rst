@@ -13,7 +13,7 @@ This page will track changes in future UNA releases.
   Attendance*) and ``min_facilities`` (fewest facilities covering all
   coverable demand; ArcGIS's *Maximize Coverage + Minimize
   Facilities*). Pre-existing facilities are pinned open via a column
-  on the candidates layer (``fa_required_column``). Deterministic
+  on the candidates layer (``fa_existing_facilities_column``). Deterministic
   greedy solver (near-optimal, any scale) or exact MILP
   (``fa_solver="exact"``, scipy/HiGHS, with automatic greedy
   fallback). Full impedance support: custom edge costs, elevation,

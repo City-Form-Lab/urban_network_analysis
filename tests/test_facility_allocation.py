@@ -5,7 +5,7 @@ Toy world (all geometry on a straight 1 km street, EPSG:3857 meters):
     network   nodes every 100 m from x=0 to x=1000 (10 edges)
     demand    x =   0, 150, 250   weight 10 each   (west cluster)
               x = 750, 900, 1000  weight  1 each   (east cluster)
-    candidates A @ x=100, B @ x=900, C @ x=500     (required column)
+    candidates A @ x=100, B @ x=900, C @ x=500     (existing column)
     cutoff    300
 
 Expected (coverage mode, flow_decay=False):
@@ -14,12 +14,12 @@ Expected (coverage mode, flow_decay=False):
     * A covers the west cluster  (dists 100, 50, 150)  → weight 30.
     * B covers the east cluster  (dists 150, 0*, 100)  → weight  3.
       (*x=900 sits exactly at B)
-    * p=1, nothing required      → pick A, objective 30.
-    * p=2, nothing required      → A then B (B adds 3, C adds only 1:
+    * p=1, nothing existing      → pick A, objective 30.
+    * p=2, nothing existing      → A then B (B adds 3, C adds only 1:
       x=250 and x=750 are already covered by A/B? with A open, C's
       marginal = x=750 (1) + nothing west → after A the best 2nd pick is
       B with 3). Objective 33, coverage 100%.
-    * B required, p=1            → baseline 3, greedy adds A (rank: B=0, A=1).
+    * B existing, p=1            → baseline 3, greedy adds A (rank: B=0, A=1).
 
 Decay mode (exponential, beta=0.004): access of demand at x=150 assigned
 to A equals exp(-0.004 * 50).
@@ -57,12 +57,12 @@ def build_toy(folder: str) -> None:
 
     cand_x = [100, 900, 500]
     gpd.GeoDataFrame(
-        {"name": ["A", "B", "C"], "required": [0, 0, 0]},
+        {"name": ["A", "B", "C"], "existing": [0, 0, 0]},
         geometry=[Point(x, 5) for x in cand_x], crs=CRS,
     ).to_file(os.path.join(folder, "candidates.geojson"), driver="GeoJSON")
 
     gpd.GeoDataFrame(
-        {"name": ["A", "B", "C"], "required": [0, 1, 0]},
+        {"name": ["A", "B", "C"], "existing": [0, 1, 0]},
         geometry=[Point(x, 5) for x in cand_x], crs=CRS,
     ).to_file(os.path.join(folder, "candidates_Breq.geojson"), driver="GeoJSON")
 
@@ -127,15 +127,15 @@ def test_p2_coverage(folder):
 def test_required(folder):
     una = fresh_una(folder)
     una.settings.destinations_file = "candidates_Breq.geojson"
-    una.settings.fa_required_column = "required"
+    una.settings.fa_existing_facilities_column = "existing"
     una.settings.fa_new_facilities = 1
     una.RunFacilityAllocation()
     e = eng(una)
-    assert e.fa_required.tolist() == [0, 1, 0]
+    assert e.fa_existing.tolist() == [0, 1, 0]
     assert e.fa_selected.tolist() == [1, 1, 0]           # B kept, A added
-    assert e.fa_rank.tolist() == [1, 0, -1]              # required rank 0
+    assert e.fa_rank.tolist() == [1, 0, -1]              # existing rank 0
     assert abs(e.summary["objective_total_access"] - 33.0) < 1e-9
-    print("  required-facility: PASS")
+    print("  existing-facility: PASS")
 
 
 def test_decay(folder):
@@ -201,7 +201,7 @@ def test_exact_max_access(folder):
 def test_min_facilities(folder):
     """Cutoff 300: A+B cover all six demand points; C is redundant.
     Expected: exactly {A, B} for both solvers, and B stays fixed when
-    required."""
+    existing."""
     for solver in ("greedy", "exact"):
         una = fresh_una(folder)
         una.settings.fa_problem_type = "min_facilities"
@@ -215,13 +215,13 @@ def test_min_facilities(folder):
 
     una = fresh_una(folder)
     una.settings.destinations_file = "candidates_Breq.geojson"
-    una.settings.fa_required_column = "required"
+    una.settings.fa_existing_facilities_column = "existing"
     una.settings.fa_problem_type = "min_facilities"
     una.settings.fa_solver = "exact"
     una.RunFacilityAllocation()
     e = eng(una)
     assert e.fa_selected.tolist() == [1, 1, 0]
-    assert e.fa_required.tolist() == [0, 1, 0]
+    assert e.fa_existing.tolist() == [0, 1, 0]
     assert e.summary["n_new"] == 1                    # only A added
     print("  min_facilities greedy+exact: PASS")
 
@@ -257,7 +257,7 @@ def test_turns(folder):
     gpd.GeoDataFrame({"name": ["d0"], "weight": [10]},
                      geometry=[Point(0, 5)], crs=CRS) \
        .to_file(os.path.join(sub, "demand.geojson"), driver="GeoJSON")
-    gpd.GeoDataFrame({"name": ["X"], "required": [0]},
+    gpd.GeoDataFrame({"name": ["X"], "existing": [0]},
                      geometry=[Point(195, 200)], crs=CRS) \
        .to_file(os.path.join(sub, "candidates.geojson"), driver="GeoJSON")
 
@@ -355,7 +355,7 @@ def test_max_patronage(folder):
     #   → A captures 5+5+10/3 = 40/3, C captures 20/3+1 = 23/3.
     cand_x = [100, 900, 500]
     gpd.GeoDataFrame(
-        {"name": ["A", "B", "C"], "required": [0, 0, 0], "attr": [1, 1, 2]},
+        {"name": ["A", "B", "C"], "existing": [0, 0, 0], "attr": [1, 1, 2]},
         geometry=[Point(x, 5) for x in cand_x], crs=CRS,
     ).to_file(os.path.join(folder, "candidates_attr.geojson"), driver="GeoJSON")
     una = fresh_una(folder)
@@ -374,13 +374,13 @@ def test_max_patronage(folder):
 
 
 def test_evaluation_run(folder):
-    """fa_new_facilities = 0: no siting — evaluate the required
-    configuration as it stands. B required, cap=2, decay off:
+    """fa_new_facilities = 0: no siting — evaluate the existing
+    configuration as it stands. B existing, cap=2, decay off:
     east cluster (3 × weight 1) reaches only B → factor 0.5 each →
     total trips 1.5, all landing at B. West cluster uncovered."""
     una = fresh_una(folder)
     una.settings.destinations_file = "candidates_Breq.geojson"
-    una.settings.fa_required_column = "required"
+    una.settings.fa_existing_facilities_column = "existing"
     una.settings.fa_problem_type = "max_patronage"
     una.settings.fa_new_facilities = 0
     una.settings.flow_gravity_cap = 2.0
@@ -391,7 +391,7 @@ def test_evaluation_run(folder):
     assert abs(e.summary["total_trips"] - 1.5) < 1e-9
     assert abs(e.fa_access_captured[1] - 1.5) < 1e-9  # all patronage at B
     assert e.fa_covered.tolist() == [0, 0, 0, 1, 1, 1]
-    print("  evaluation run (p=0, required only): PASS")
+    print("  evaluation run (p=0, existing only): PASS")
 
 
 def test_batch(folder):

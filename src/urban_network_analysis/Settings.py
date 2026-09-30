@@ -137,7 +137,7 @@ class Settings:
     # methods are available, distinguished by `flow_decay_method`:
     #
     #   "closest"   — factor = decay_curve(distance to nearest destination)
-    #                 No additional user input required beyond the curve
+    #                 No additional user input existing beyond the curve
     #                 parameters (beta, plateau, midpoint).  Trip generation
     #                 is fully determined by the distance to your single
     #                 nearest reachable destination.  Adding destinations
@@ -293,7 +293,7 @@ class Settings:
     # Optimal siting of facilities among candidate locations, driven by
     # RunFacilityAllocation(). Demand = origins layer (origin_weight_column),
     # candidates = destinations layer; already-existing facilities are
-    # marked by a truthy value in fa_required_column on the candidates
+    # marked by a truthy value in fa_existing_facilities_column on the candidates
     # layer and are always kept open. search_radius is the cutoff, and
     # travel is always evaluated TOWARDS the facility (directional
     # elevation costs accumulate in that direction of travel).
@@ -317,11 +317,11 @@ class Settings:
     #                      maximize TOTAL TRIPS GENERATED under the
     #                      gravity-cap trip-generation model: demand i
     #                      generates w_i x min(1, sum_j g_ij / cap) trips
-    #                      (cap = flow_gravity_cap, NUMERIC required),
+    #                      (cap = flow_gravity_cap, NUMERIC existing),
     #                      where g_ij = dest_weight_j x decay(d_ij), and
     #                      trips split among open facilities by Huff
     #                      share — so per-facility outputs show patronage
-    #                      including cannibalization of required
+    #                      including cannibalization of existing
     #                      facilities. Facility attractiveness comes from
     #                      destination_weight_column — the same role
     #                      destination weights play in RunFlow's Huff
@@ -338,8 +338,8 @@ class Settings:
     # min_facilities; in max_patronage it supplies facility
     # attractiveness, exactly as in RunFlow's Huff model.
     fa_problem_type: Literal["max_access", "min_facilities", "max_patronage"] = "max_access"
-    fa_new_facilities: int = 1                 # facilities to ADD beyond required ones
-    fa_required_column: str | None = None      # truthy column on candidates layer; None/blank = no existing facilities
+    fa_new_facilities: int = 0                 # facilities to ADD beyond existing ones; 0 (default) = evaluation run: allocate demand to existing facilities only
+    fa_existing_facilities_column: str | None = None      # truthy column on candidates layer; None/blank = no existing facilities
     fa_solver: Literal["greedy", "exact"] = "greedy"
 
     ##——— BATCH COMPOSITE OUTPUT (Tool: BatchCompositor) ———
@@ -625,14 +625,14 @@ class Settings:
         # Facility allocation (fa_problem_type / fa_solver Literals are
         # validated by the generic Literal check above).
         # fa_new_facilities = 0 is a valid EVALUATION run: no siting,
-        # allocation computed for the required facilities alone
+        # allocation computed for the existing facilities alone
         # (baseline access / patronage of the existing configuration).
         if int(self.fa_new_facilities) < 0 \
                 and self.fa_problem_type in ("max_access", "max_patronage"):
             errors.append(
                 f"fa_new_facilities must be >= 0 for "
                 f"fa_problem_type='{self.fa_problem_type}' "
-                f"(0 = evaluate the required facilities only); "
+                f"(0 = evaluate the existing facilities only); "
                 f"got {self.fa_new_facilities}."
             )
 

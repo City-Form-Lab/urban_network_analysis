@@ -523,7 +523,7 @@ class UNA:
 
         Demand = origins layer (origin_weight_column), candidates =
         destinations layer, existing facilities marked by a truthy
-        value in settings.fa_required_column. search_radius is the
+        value in settings.fa_existing_facilities_column. search_radius is the
         service cutoff; travel is evaluated towards the facility.
         See settings fa_problem_type / fa_new_facilities / fa_solver.
 
