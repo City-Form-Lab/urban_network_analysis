@@ -116,22 +116,48 @@ Problem types
 Solvers
 -------
 
+The two solvers differ in *how they choose the set of facilities* —
+a classic speed-versus-guarantee trade.
+
 ``fa_solver = "greedy"`` (default)
-    Deterministic marginal-gain greedy. Both objectives are submodular,
-    so greedy carries the classic :math:`(1 - 1/e)` near-optimality
-    guarantee for ``max_access`` (and the standard set-cover guarantee
-    for ``min_facilities``), and it scales to any problem size. The
-    pick order is reported in the ``rank`` output column — facility 1
-    is the single best site, facility 2 the best increment, and so on.
+    Builds the answer one facility at a time: open the candidate that
+    adds the most, lock it in, repeat — never reconsidering earlier
+    picks. Fast at any problem size, deterministic, and the pick order
+    comes out as the ``rank`` column: facility 1 is the best single
+    site, facility 2 the best *addition* given facility 1, and so on
+    (so one run at p = 5 contains the nested answers for p = 1…4).
+    The catch: it can miss combinations that only work *together* —
+    two individually mediocre sites flanking a demand cluster that no
+    single site covers well will never be opened, because each looks
+    weak alone. Theory bounds the damage (the objectives are
+    submodular, giving the classic :math:`(1 - 1/e) \approx 63\%`
+    worst-case guarantee for ``max_access``); in practice on real
+    geographic data greedy is typically within a percent or two of
+    optimal, and often exactly optimal.
 
 ``fa_solver = "exact"``
-    Optimal MILP via ``scipy.optimize.milp`` (HiGHS — already part of
-    UNA's dependency set). Practical up to a few hundred candidates
-    and ~3M demand-candidate pairs; beyond that, or if the solver
-    fails or times out (600 s), the run **falls back to greedy with a
-    logged warning** and records the fallback in the summary output.
-    For exact runs the ``rank`` column is produced by re-ordering the
-    optimal set greedily, so it stays meaningful.
+    Considers all facility combinations *jointly* (a mixed-integer
+    program solved by HiGHS via ``scipy.optimize.milp`` — already in
+    UNA's dependency set) and returns a **provably optimal** set,
+    interactions included. The costs: runtime grows steeply with
+    problem size — practical up to a few hundred candidates and ~3M
+    demand-candidate pairs; beyond that, or if the solver fails or
+    times out (600 s), the run **falls back to greedy with a logged
+    warning** and records the fallback in the summary output. Exact
+    answers arrive as an unordered set, so the ``rank`` column is
+    reconstructed by greedily re-ordering the optimal set — readable,
+    but not part of the optimality proof.
+
+    Not available for ``max_patronage`` — its saturating
+    trip-generation objective does not fit the linear form the MILP
+    needs, so that problem type **always uses greedy** (with the same
+    near-optimality guarantee).
+
+**Which to use:** greedy for exploration, large cases, and whenever
+the incremental "which site first?" ranking is the story; exact when
+the facility count is small and the decision warrants "provably best"
+(e.g. a formal siting recommendation). Running both and seeing them
+agree is itself a useful robustness check.
 
 
 Example
