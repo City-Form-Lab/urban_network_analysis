@@ -30,13 +30,13 @@ import urban_network_analysis
 # EDIT THESE VALUES
 # --------------------------------------------------------------------------
 
-DATA_FOLDER   = r"/path/to/your/data"
-NETWORK       = "network.geojson"
-DEMAND        = "building_centroids.geojson"    # origins = demand points
-DEMAND_WEIGHT = "pop2020"                       # demand weight column
-CANDIDATES    = "candidate_sites.geojson"       # destinations = candidate facilities
-EXISTING_COL  = "existing"                      # truthy = already-open facility; None if none
-OUTPUT_FOLDER = r"/path/to/your/data/Results"
+DATA_FOLDER   = r"/Users/andressevtsuk/City Form Lab Dropbox/Andres Sevtsuk/_MIT_Fall2026/11.024:11.324/04_Assignments/Personal/Exercise2/una_Facility_Allocation"
+NETWORK       = "downtown_centerline_network.geojson"
+DEMAND        = "DT_building_centroids_800m_pop_jobs.geojson"    # origins = demand points
+DEMAND_WEIGHT = "pop_est"                       # demand weight column
+CANDIDATES    = "candadate_locations_999_2026.geojson"       # destinations = candidate facilities
+EXISTING_COL  = "required"                      # truthy = already-open facility; None if none. Treats it as not required when it's empty, NaN, 0, 0.0, false, no, or none (case-insensitive) — anything else means required
+OUTPUT_FOLDER = r"/Users/andressevtsuk/City Form Lab Dropbox/Andres Sevtsuk/_MIT_Fall2026/11.024:11.324/04_Assignments/Personal/Exercise2/una_Facility_Allocation/Results"
 
 CUTOFF         = 800            # service cutoff (network units)
 
@@ -125,10 +125,21 @@ if RUN_FLOW_ON_RESULT:
     chosen.to_file(os.path.join(DATA_FOLDER, chosen_file), driver="GeoJSON")
     print(f"{len(chosen)} facilities selected -> {chosen_file}")
 
+    # All Part 1 parameters carry over on the same settings object
+    # (search_radius, weights, gravity_beta, decay curve, elevation,
+    # turns, ...). Only what must change for a flow run is set here —
+    # including the trip-generation method that MATCHES the siting
+    # objective, so Part 2 estimates flows under the same behavioral
+    # model that chose the sites:
+    #   max_access / min_facilities → "closest" (decay at the nearest
+    #       facility — the access objective's model)
+    #   max_patronage → "gravity_cap" (saturating participation, same
+    #       flow_gravity_cap — the patronage objective's model)
+    # flow_decay itself is inherited from Part 1 (False stays False for
+    # pure-coverage runs).
     s.destinations_file  = chosen_file
     s.flow_engine        = "aggregate_flow"
-    s.flow_decay         = True
-    s.flow_decay_method  = "closest"
+    s.flow_decay_method  = "gravity_cap" if PROBLEM == "max_patronage" else "closest"
     s.output_file_name   = "fa_run_flow"
 
     una.RunFlow()
