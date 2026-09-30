@@ -168,6 +168,13 @@ Written to ``output_folder`` per the ``output_*`` format flags:
 ``access_captured``   Σ demand weight × decay(distance) assigned here
 ===================  ======================================================
 
+``<name>_facilities_selected.*`` — the same columns, filtered to only
+the OPEN facilities (required + chosen). Maps the chosen configuration
+directly — no filter step — and is directly usable as a
+``destinations_file`` for a follow-up ``RunFlow()``. The full
+``_facilities`` table remains the analytic record, including the
+evaluated-but-rejected candidates.
+
 ``<name>_demand.*`` — the origins layer with:
 
 ======================  ===================================================

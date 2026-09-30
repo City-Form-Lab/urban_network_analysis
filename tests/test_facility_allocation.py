@@ -159,9 +159,12 @@ def test_outputs_and_errors(folder):
     una.settings.fa_new_facilities = 2
     una.RunFacilityAllocation()
     out = una.settings.output_folder
-    for suffix in ("_facilities.geojson", "_demand.geojson", "_summary.json"):
+    for suffix in ("_facilities.geojson", "_facilities_selected.geojson",
+                   "_demand.geojson", "_summary.json"):
         path = os.path.join(out, "fa_test" + suffix)
         assert os.path.isfile(path), f"missing {path}"
+    sel = gpd.read_file(os.path.join(out, "fa_test_facilities_selected.geojson"))
+    assert len(sel) == 2 and set(sel["selected"]) == {1}   # only A and B
     with open(os.path.join(out, "fa_test_summary.json")) as f:
         summary = json.load(f)
     assert summary["n_new"] == 2

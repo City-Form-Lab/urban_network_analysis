@@ -1028,6 +1028,18 @@ class FacilityAllocation(AggregateFlow):
             self.logger, "FacilityAllocation", desc="facilities",
         )
 
+        # Convenience layer: only the OPEN facilities (required +
+        # chosen), same columns — maps the chosen configuration without
+        # a filter step, and is directly usable as a destinations_file
+        # for a follow-up RunFlow(). The full candidates table above
+        # remains the analytic record (the "no" decisions).
+        fac_sel = fac[fac["selected"] == 1].reset_index(drop=True)
+        write_gdf_outputs(
+            fac_sel, settings, output_folder,
+            file_name + "_facilities_selected",
+            self.logger, "FacilityAllocation", desc="selected facilities",
+        )
+
         orig = self.topology.origins
         dem = gpd.GeoDataFrame(
             {
