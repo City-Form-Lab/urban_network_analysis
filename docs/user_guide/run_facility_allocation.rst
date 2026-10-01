@@ -219,15 +219,14 @@ Example
    project = una.UNA()
    s = project.settings
 
-   s.data_folder          = "Portland"
-   s.network_file         = "sidewalks_3D.geojson"
-   s.origins_file         = "building_centroids.geojson"   # demand
+   s.data_folder          = "Boston"    # this repo's docs/Boston has the tutorial data
+   s.network_file         = "20260703_PercLenNetwork_InnerCore.geojson"
+   s.origins_file         = "Cambridge_building_centroids_pop2020.geojson"   # demand
    s.origin_weight_column = "pop2020"
-   s.destinations_file    = "library_sites.geojson"        # candidates
-   s.fa_existing_facilities_column   = "existing"                     # column marking open libraries
+   s.destinations_file    = "Cambridge_school_candidates.geojson"            # candidates
+   s.fa_existing_facilities_column = "existing"    # column marking already-open centers
 
    s.search_radius        = 800          # service cutoff
-   s.elevation            = True
    s.flow_decay           = True
    s.flow_decay_curve     = "exponential"
    s.gravity_beta         = 0.002
@@ -320,10 +319,10 @@ and footfall from the same impedance model:
        geometry=gpd.GeoSeries(dest.geometry).reset_index(drop=True),
        crs=getattr(dest.geometry, "crs", None),
    )
-   fac[fac["selected"] == 1].to_file("Portland/chosen_libraries.geojson",
+   fac[fac["selected"] == 1].to_file("Boston/chosen_centers.geojson",
                                      driver="GeoJSON")
 
-   s.destinations_file = "chosen_libraries.geojson"
+   s.destinations_file = "chosen_centers.geojson"
    s.flow_engine       = "aggregate_flow"
    s.flow_decay        = True
    s.flow_decay_method = "closest"
