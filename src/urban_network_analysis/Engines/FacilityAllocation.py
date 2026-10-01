@@ -335,6 +335,14 @@ class FacilityAllocation(AggregateFlow):
                     f"facilities only (no new siting).", v=1,
                 )
         if ns["problem"] == "min_facilities":
+            if ns["p_new"] != 0:
+                self.logger.log(
+                    "FacilityAllocation",
+                    f"NOTE: fa_new_facilities={ns['p_new']} is ignored by "
+                    f"fa_problem_type='min_facilities' — the facility "
+                    f"count is this problem type's OUTPUT, not an input.",
+                    v=1,
+                )
             if ns["solver"] == "exact":
                 selected, rank = self._milp_min_facilities(
                     n_orig, cand_demand, w, existing, coverable
