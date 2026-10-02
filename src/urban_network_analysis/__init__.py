@@ -28,21 +28,26 @@ def _commit_date() -> str:
     recent commit. Editable installs / clones don't rebuild, so for
     those we ask git directly. Falls back to "unknown".
     """
-    try:
-        from ._build_info import __commit_date__
-        if __commit_date__ != "unknown":
-            return __commit_date__
-    except ImportError:
-        pass
+    # Ask git FIRST: in an editable install / clone, git has the live
+    # answer, while a leftover _build_info.py from an earlier wheel
+    # build would be stale. Regular installs have no git repo, so they
+    # fall through to the _build_info.py baked in at install time.
     try:
         import os
         import subprocess
         here = os.path.dirname(os.path.abspath(__file__))
-        return subprocess.check_output(
+        date = subprocess.check_output(
             ["git", "log", "-1", "--format=%cs"],
             cwd=here, text=True, stderr=subprocess.DEVNULL,
-        ).strip() or "unknown"
+        ).strip()
+        if date:
+            return date
     except Exception:
+        pass
+    try:
+        from ._build_info import __commit_date__
+        return __commit_date__
+    except ImportError:
         return "unknown"
 
 
