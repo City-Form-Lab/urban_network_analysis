@@ -57,6 +57,7 @@ These docs cover UNA version |release|.
    tutorials/tutorial_2_accessibility
    tutorials/tutorial_3_flow
    tutorials/tutorial_4_design_impact
+   tutorials/tutorial_5_facility_allocation
 
 .. toctree::
    :maxdepth: 2
