@@ -102,13 +102,7 @@ If you use UNA, please cite the package:
 
 This DOI covers all versions and always resolves to the latest
 release; each release also carries its own version DOI on Zenodo —
-cite that one when exact reproducibility matters. For the methods
-behind the package, please also cite our paper in the *Journal of
-Transport Geography*:
-
-    Sevtsuk, A. (2025). Urban Network Analysis for pedestrian and bicycle
-    modeling. *Journal of Transport Geography*.
-    https://www.sciencedirect.com/science/article/pii/S0966692325000213
+cite that one when exact reproducibility matters.
 
 
 Contact & Contributions
