@@ -1,5 +1,7 @@
 # UNA — Urban Network Analysis
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23120398.svg)](https://doi.org/10.5281/zenodo.23120398)
+
 UNA is a free, open-source Python package for computing **accessibility**
 and **pedestrian-flow** metrics on spatial networks, developed by
 Andres Sevtsuk and Raul Kalvo at the
@@ -114,7 +116,15 @@ print(urban_network_analysis.__version__)
 
 ## Citing UNA
 
-If you use UNA in academic work, please cite:
+To cite the software itself:
+
+- Sevtsuk, A., & Kalvo, R. (2026). *urban_network_analysis: the UNA
+  Python package* [Computer software]. Zenodo.
+  https://doi.org/10.5281/zenodo.23120398
+  (this DOI covers all versions; each release also carries its own
+  version DOI on Zenodo — cite that one for exact reproducibility)
+
+If you use UNA in academic work, please also cite the methods papers:
 
 - Sevtsuk, A., & Mekonnen, M. (2012). Urban network analysis: A new
   toolbox for ArcGIS. *Revue Internationale de Géomatique*, 22(2),

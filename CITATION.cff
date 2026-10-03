@@ -1,0 +1,24 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it using the metadata below, along with the UNA methods papers listed in the README."
+title: "urban_network_analysis: the UNA Python package"
+type: software
+authors:
+  - family-names: Sevtsuk
+    given-names: Andres
+    affiliation: "MIT City Form Lab, Massachusetts Institute of Technology"
+    email: asevtsuk@mit.edu
+  - family-names: Kalvo
+    given-names: Raul
+    affiliation: "MIT City Form Lab"
+license: MIT
+repository-code: "https://github.com/City-Form-Lab/urban_network_analysis"
+url: "https://urban-network-analysis.readthedocs.io"
+doi: 10.5281/zenodo.23120398
+keywords:
+  - urban planning
+  - network analysis
+  - accessibility
+  - pedestrian flow
+  - betweenness
+  - facility allocation
+  - GIS

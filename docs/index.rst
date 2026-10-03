@@ -90,8 +90,21 @@ These docs cover UNA version |release|.
 Citing UNA
 ----------
 
-If you use UNA in academic work, please cite our recent paper in the
-*Journal of Transport Geography*:
+.. image:: https://zenodo.org/badge/DOI/10.5281/zenodo.23120398.svg
+   :target: https://doi.org/10.5281/zenodo.23120398
+   :alt: DOI
+
+If you use UNA, please cite the package:
+
+    Sevtsuk, A., & Kalvo, R. (2026). *urban_network_analysis: the UNA
+    Python package* [Computer software]. Zenodo.
+    https://doi.org/10.5281/zenodo.23120398
+
+This DOI covers all versions and always resolves to the latest
+release; each release also carries its own version DOI on Zenodo —
+cite that one when exact reproducibility matters. For the methods
+behind the package, please also cite our paper in the *Journal of
+Transport Geography*:
 
     Sevtsuk, A. (2025). Urban Network Analysis for pedestrian and bicycle
     modeling. *Journal of Transport Geography*.
