@@ -103,6 +103,7 @@ Contact & Contributions
 
 The package is maintained by **Andres Sevtsuk** and **Raul Kalvo** at the
 MIT City Form Lab. Bug reports, feature requests, and contributions are welcome
-via the project's GitHub repository (link forthcoming). For questions about
+via the project's `GitHub repository
+<https://github.com/City-Form-Lab/urban_network_analysis>`_. For questions about
 academic collaboration or teaching engagements, contact Prof. Sevtsuk at
 ``asevtsuk@mit.edu``.
