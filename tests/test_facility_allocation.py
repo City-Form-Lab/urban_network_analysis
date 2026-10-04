@@ -165,6 +165,13 @@ def test_outputs_and_errors(folder):
         assert os.path.isfile(path), f"missing {path}"
     sel = gpd.read_file(os.path.join(out, "fa_test_facilities_selected.geojson"))
     assert len(sel) == 2 and set(sel["selected"]) == {1}   # only A and B
+    # max_access outputs use the familiar UNA metric names (Rhino
+    # Closest Facility correspondence): reach + gravity
+    fac = gpd.read_file(os.path.join(out, "fa_test_facilities.geojson"))
+    assert "reach" in fac.columns and "gravity" in fac.columns, fac.columns
+    assert "demand_served" not in fac.columns
+    assert abs(fac["reach"].sum() - 33.0) < 1e-9           # coverage run: gravity == reach
+    assert abs(fac["gravity"].sum() - 33.0) < 1e-9
     with open(os.path.join(out, "fa_test_summary.json")) as f:
         summary = json.load(f)
     assert summary["n_new"] == 2

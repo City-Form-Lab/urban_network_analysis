@@ -1,0 +1,14 @@
+{
+  "problem_type": "max_patronage",
+  "solver": "greedy",
+  "objective_total_access": 28376.27911347506,
+  "total_trips": 28376.27911347506,
+  "gravity_cap": 1.0,
+  "n_selected": 6,
+  "n_existing": 3,
+  "n_new": 3,
+  "demand_total": 118705.0009,
+  "demand_covered": 58755.548599999995,
+  "demand_uncovered": 59949.452300000004,
+  "pct_covered": 49.49711314142284
+}

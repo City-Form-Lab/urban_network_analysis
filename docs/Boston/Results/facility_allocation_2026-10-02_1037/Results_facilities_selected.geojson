@@ -1,0 +1,14 @@
+{
+"type": "FeatureCollection",
+"name": "Results_facilities_selected",
+"crs": { "type": "name", "properties": { "name": "urn:ogc:def:crs:EPSG::6491" } },
+"xy_coordinate_resolution": 1e-06,
+"features": [
+{"type":"Feature","properties":{"uid":13,"selected":1,"existing":0,"rank":2,"demand_served":11283.241517483249,"patronage":5371.4617230203785},"geometry":{"type":"Point","coordinates":[232873.661522,901964.114741]}},
+{"type":"Feature","properties":{"uid":25,"selected":1,"existing":0,"rank":1,"demand_served":10721.348157008184,"patronage":5693.8510045805806},"geometry":{"type":"Point","coordinates":[230981.262445,903686.113884]}},
+{"type":"Feature","properties":{"uid":27,"selected":1,"existing":1,"rank":0,"demand_served":7482.0376437504037,"patronage":5054.1068203931609},"geometry":{"type":"Point","coordinates":[233658.957602,902451.0236]}},
+{"type":"Feature","properties":{"uid":44,"selected":1,"existing":1,"rank":0,"demand_served":7528.4540429918161,"patronage":3963.3546130820805},"geometry":{"type":"Point","coordinates":[230600.372975,904673.376261]}},
+{"type":"Feature","properties":{"uid":48,"selected":1,"existing":0,"rank":3,"demand_served":5849.4866352026029,"patronage":4940.7679208191921},"geometry":{"type":"Point","coordinates":[233288.498507,901890.757008]}},
+{"type":"Feature","properties":{"uid":54,"selected":1,"existing":1,"rank":0,"demand_served":11071.323303563746,"patronage":11071.323303563746},"geometry":{"type":"Point","coordinates":[231965.475932,902735.249804]}}
+]
+}

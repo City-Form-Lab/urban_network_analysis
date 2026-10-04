@@ -1049,20 +1049,27 @@ class FacilityAllocation(AggregateFlow):
         file_name = file_name or "facility_allocation"
 
         dest = self.topology.destinations
-        # In max_patronage runs the captured quantity IS estimated trips
-        # (the Huff-split patronage landing at each facility), so the
-        # column is named accordingly; in access/coverage runs it is the
-        # decay-weighted access captured.
-        captured_col = ("patronage"
-                        if getattr(self, "_problem", "") == "max_patronage"
-                        else "access_captured")
+        # Column naming follows the measurement model of the run.
+        # max_access / min_facilities use all-or-nothing nearest
+        # assignment, so the per-facility sums ARE the familiar UNA
+        # accessibility metrics summarized at the facility (exactly the
+        # Rhino toolbox's Closest Facility outputs): "reach" = summed
+        # demand weight of origins assigned here, "gravity" = their
+        # decay-weighted sum. max_patronage splits demand fractionally
+        # (Huff) and applies the participation model, so its columns
+        # keep distinct names: "demand_served" (Huff-shared pool, NOT a
+        # Reach) and "patronage" (estimated trips).
+        if getattr(self, "_problem", "") == "max_patronage":
+            pool_col, captured_col = "demand_served", "patronage"
+        else:
+            pool_col, captured_col = "reach", "gravity"
         fac = gpd.GeoDataFrame(
             {
                 "uid":           np.asarray(dest.uid),
                 "selected":      self.fa_selected,
                 "existing":      self.fa_existing,
                 "rank":          self.fa_rank,
-                "demand_served": self.fa_demand_served,
+                pool_col:        self.fa_demand_served,
                 captured_col:    self.fa_access_captured,
             },
             geometry=gpd.GeoSeries(dest.geometry).reset_index(drop=True),

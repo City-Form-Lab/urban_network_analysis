@@ -3,6 +3,16 @@ Changelog
 
 This page will track changes in future UNA releases.
 
+.. rubric:: v2.7.1
+
+- **Facility Allocation output columns renamed** to the familiar UNA
+  metric names: in ``max_access`` and ``min_facilities`` runs the
+  per-facility columns are now ``reach`` (was ``demand_served``) and
+  ``gravity`` (was ``access_captured``) — they are exactly these
+  metrics summarized at the facility, matching the Rhino toolbox's
+  Closest Facility tool. ``max_patronage`` outputs keep
+  ``demand_served`` (Huff-split pool, not a Reach) and ``patronage``.
+
 .. rubric:: v2.7.0
 
 - **Facility Allocation engine.** New ``RunFacilityAllocation()``

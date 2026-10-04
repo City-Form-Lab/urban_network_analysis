@@ -23,8 +23,8 @@ cannot be served by any facility and is reported as uncovered.
    (``fa_new_facilities = 0``) corresponds to the Rhino **Closest
    Facility** tool: each origin is allocated once to its nearest
    facility within the radius, and the per-facility outputs match —
-   ``demand_served`` is the Reach summarized at the facility,
-   ``access_captured`` the Gravity (exponential decay). An evaluation
+   the per-facility outputs are named accordingly — ``reach`` and
+   ``gravity``, exactly the Rhino tool's metrics. An evaluation
    run of ``max_patronage`` corresponds to the Rhino **Find
    Patronage** tool's Huff model (Huff 1963; Sevtsuk & Kalvo 2017),
    with two differences. First, the trip-generation convention: the
@@ -249,14 +249,20 @@ Written to ``output_folder`` per the ``output_*`` format flags:
 ``selected``          1 = open in the chosen configuration
 ``existing``          1 = was a pre-existing facility
 ``rank``              0 = existing; 1..k = pick order; -1 = not selected
-``demand_served``     total demand weight assigned to this facility
-                      (Huff-split fractions in ``max_patronage``)
-``access_captured``   Σ demand weight × decay(distance) assigned here.
-                      In ``max_patronage`` runs this column is named
-                      ``patronage`` instead — the estimated trips
-                      landing at each facility (Huff split; sums to the
+``reach``             (``max_access`` / ``min_facilities``) total demand
+                      weight assigned to this facility — the familiar
+                      UNA Reach, summarized at the facility (each origin
+                      counted once, at its nearest open facility)
+``gravity``           (``max_access`` / ``min_facilities``) Σ demand
+                      weight × decay(distance) of the origins assigned
+                      here — Gravity summarized at the facility. With
+                      ``flow_decay = False`` it equals ``reach``.
+``demand_served``     (``max_patronage`` only) the facility's Huff-split
+                      catchment pool — fractional, so NOT a Reach
+``patronage``         (``max_patronage`` only) estimated trips landing
+                      at each facility (Huff split; sums to the
                       summary's ``total_trips``, and existing
-                      facilities' values reveal cannibalization).
+                      facilities' values reveal cannibalization)
 ===================  ======================================================
 
 .. note::

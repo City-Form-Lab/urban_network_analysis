@@ -24,8 +24,8 @@ of every building; the service cutoff is an 800 m walk.
 **Lineage.** Users of the UNA Rhino toolbox will recognize this
 engine's ancestry: an evaluation run of ``max_access`` corresponds to
 the Rhino Closest Facility tool (each origin allocated once to its
-nearest facility; ``demand_served`` = Reach at the facility,
-``access_captured`` = Gravity), and ``max_patronage`` descends from the
+nearest facility; its per-facility ``reach`` and ``gravity`` columns
+are exactly the Rhino tool's outputs), and ``max_patronage`` descends from the
 Find Patronage tool's Huff model (Huff 1963; Sevtsuk & Kalvo 2017). One
 convention differs: the Rhino tool either split one inelastic trip per
 origin (Decay=Off) or decayed each destination's trips individually
@@ -99,7 +99,7 @@ the 800 m cutoff).
 .. note::
 
    Because this run uses ``max_access``, the facilities output reports
-   decay-weighted ``access_captured`` — assuming that everyone visits
+   decay-weighted ``gravity`` — assuming that everyone visits
    their nearest available destination, how much demand would accrue
    to each destination facility, with the given distance decay
    applied. This is different from expected patronage estimated with
@@ -113,10 +113,10 @@ candidates with selection columns), ``Results_facilities_selected.*``
 (only the open facilities — drag this into QGIS to map the
 configuration), and ``Results_demand.*`` (every building with its
 assigned facility, network distance, access value, and covered flag),
-plus a ``Results_summary.json``. The ``demand_served`` column in the
+plus a ``Results_summary.json``. The ``reach`` column in the
 ``Results_facilities.*`` file shows that only 24.6% of Cambridge
 residents (29,189 of 118,705 total in Cambridge) live within the 800 m
-cutoff of an existing center. The ``access_captured`` column in the
+cutoff of an existing center. The ``gravity`` column in the
 ``Results_facilities.*`` file shows that of the 11,233 residents for
 whom the Cambridge Rindge & Latin School is the nearest existing
 facility, only 3,986 would be captured by that facility, with the
@@ -135,8 +135,8 @@ of farther residents to actually walk to the facility.
    :widths: 40 30 30
 
    * - Existing center
-     - demand_served (residents)
-     - access_captured
+     - reach (residents)
+     - gravity
    * - Cambridge Rindge & Latin
      - 11,233
      - 3,986
@@ -172,8 +172,8 @@ The greedy solver adds facilities one at a time, each pick maximizing
 the marginal gain given everything already open: pick 1 = James F Farr
 Academy (East Cambridge), pick 2 = Graham & Parks Elementary (West
 Cambridge), pick 3 = Martin Luther King After School (Cambridgeport).
-The total ``access_captured`` rises from 10,566 to 24,442 (+131%) and
-``demand_served`` from 24.6% to 53.4% of Cambridge residents. Note
+The total ``gravity`` rises from 10,566 to 24,442 (+131%) and
+``reach`` from 24.6% to 53.4% of Cambridge residents. Note
 that even though the Martin Luther King and James F. Farr Academy
 800 m walksheds overlap due to the proximity of the two facilities,
 ``max_access`` assigns every demand point to its closest facility,
@@ -319,7 +319,7 @@ The three existing centers can expect roughly 10,566 user-trips in
 total — and that number should look familiar: it is exactly run (a)'s
 objective. With cap = 1 and non-overlapping catchments, each
 building's participation factor is ``min(1, decay/1) = decay`` itself,
-so ``patronage`` reproduces ``access_captured`` from (a) exactly for
+so ``patronage`` reproduces the ``gravity`` values from (a) exactly for
 each facility. The two problem types measure the same thing in this
 case — the comparison below is the proof, and the divergence begins
 only in step (g), when catchments start to overlap.

@@ -1,0 +1,11 @@
+{
+"type": "FeatureCollection",
+"name": "Results_facilities_selected",
+"crs": { "type": "name", "properties": { "name": "urn:ogc:def:crs:EPSG::6491" } },
+"xy_coordinate_resolution": 1e-06,
+"features": [
+{"type":"Feature","properties":{"uid":27,"selected":1,"existing":1,"rank":0,"demand_served":10162.7543,"access_captured":3855.405062506697},"geometry":{"type":"Point","coordinates":[233658.957602,902451.0236]}},
+{"type":"Feature","properties":{"uid":44,"selected":1,"existing":1,"rank":0,"demand_served":7792.9618,"access_captured":2724.5880991107515},"geometry":{"type":"Point","coordinates":[230600.372975,904673.376261]}},
+{"type":"Feature","properties":{"uid":54,"selected":1,"existing":1,"rank":0,"demand_served":11233.4183,"access_captured":3985.768590358557},"geometry":{"type":"Point","coordinates":[231965.475932,902735.249804]}}
+]
+}

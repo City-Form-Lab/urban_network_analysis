@@ -1,0 +1,12 @@
+{
+  "problem_type": "min_facilities",
+  "solver": "greedy",
+  "objective_total_access": 101696.9473,
+  "n_selected": 27,
+  "n_existing": 3,
+  "n_new": 24,
+  "demand_total": 118705.0009,
+  "demand_covered": 101696.9473,
+  "demand_uncovered": 17008.0536,
+  "pct_covered": 85.67199909772293
+}

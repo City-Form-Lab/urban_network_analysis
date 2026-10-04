@@ -1,0 +1,12 @@
+{
+  "problem_type": "max_access",
+  "solver": "greedy",
+  "objective_total_access": 10565.761751976008,
+  "n_selected": 3,
+  "n_existing": 3,
+  "n_new": 0,
+  "demand_total": 118705.0009,
+  "demand_covered": 29189.134400000003,
+  "demand_uncovered": 89515.8665,
+  "pct_covered": 24.58964169891178
+}
