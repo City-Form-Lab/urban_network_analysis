@@ -143,12 +143,21 @@ def _normalize_method(name) -> str:
 
 def _cutoff_for_shortest(shortest_d: float, mode: str, ratio: float, buffer: float) -> float:
     if mode == "ratio":
-        return shortest_d * ratio
-    if mode == "buffer":
-        return shortest_d + buffer
-    if mode == "min":
-        return min(shortest_d * ratio, shortest_d + buffer)
-    raise ValueError(f"Unknown detour_mode {mode!r}, expected one of {_VALID_MODES}.")
+        cutoff = shortest_d * ratio
+    elif mode == "buffer":
+        cutoff = shortest_d + buffer
+    elif mode == "min":
+        cutoff = min(shortest_d * ratio, shortest_d + buffer)
+    else:
+        raise ValueError(f"Unknown detour_mode {mode!r}, expected one of {_VALID_MODES}.")
+    # Float-safety margin. With flow_detour_ratio = 1.0 the budget equals
+    # the shortest cost EXACTLY, and arcs on the true shortest path whose
+    # d_o + w + d_d accumulates ~1e-10 of floating-point error fall just
+    # over the line — fragmenting the path (the dead-end pruning then
+    # cascades the gaps). A micrometer-scale tolerance admits them while
+    # being far below the smallest real cost difference the network can
+    # express (weights are rounded to network_precision decimals).
+    return cutoff + 1e-6 + 1e-9 * cutoff
 
 
 # ======================================================================

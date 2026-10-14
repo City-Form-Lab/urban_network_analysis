@@ -3,6 +3,17 @@ Changelog
 
 This page will track changes in future UNA releases.
 
+.. rubric:: v2.7.2
+
+- **aggregate_flow: exact shortest-path envelopes fixed.** With
+  ``flow_detour_ratio = 1.0`` the admissibility budget equaled the
+  shortest cost exactly, and floating-point noise (~1e-10) excluded
+  some true shortest-path arcs — fragmenting the path. The detour
+  cutoff now carries a micrometer-scale float-safety margin; at
+  ratio 1.0 the aggregate engine reproduces the k_alternatives
+  shortest-path flows exactly. Results at ratios > 1 are unchanged
+  (the margin is far below the network's cost precision).
+
 .. rubric:: v2.7.1
 
 - **Facility Allocation output columns renamed** to the familiar UNA
